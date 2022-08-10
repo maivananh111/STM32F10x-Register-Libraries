@@ -50,7 +50,6 @@ extern "C" {
 #define PINK        0xFC9F
 
 
-extern DMA *tft_lcd_dmatx;
 extern volatile uint8_t dma_tft_flag;
 extern volatile int8_t dma_tft_cnt;
 
@@ -64,7 +63,7 @@ class TFT_ST7735{
 		const uint16_t COLOR[19] = {BLACK, NAVY, DARKGREEN, DARKCYAN, MAROON, PURPLE, OLIVE, LIGHTGREY, DARKGREY, BLUE, GREEN, CYAN, RED, MAGENTA, YELLOW, WHITE, ORANGE, GREENYELLOW, PINK};
 
 		TFT_ST7735(GPIO_TypeDef *CS_PORT, uint16_t CS_PIN, GPIO_TypeDef *RST_PORT, uint16_t RST_PIN, GPIO_TypeDef *DC_PORT, uint16_t DC_PIN);
-		void Init(SPI<uint8_t> *spi, DMA *dma, Color_Format Format);
+		void Init(SPI<uint8_t> *spi, Color_Format Format);
 		void SetRotation(uint8_t m);
 		void SetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 		void WriteColor(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t *Data, uint16_t size);
@@ -82,10 +81,10 @@ class TFT_ST7735{
 
 #endif
 	private:
-		GPIO_TypeDef *CS_Port = GPIOA, *RST_Port = GPIOA, *DC_Port = GPIOA;
-		uint16_t CS_Pin = 8, RST_Pin = 9, DC_Pin = 10;
-		uint8_t X_Start = 0, Y_Start = 0;
-		Color_Format _format;
+		GPIO_TypeDef *CS_Port, *RST_Port, *DC_Port;
+		uint16_t CS_Pin, RST_Pin, DC_Pin;
+		uint8_t X_Start, Y_Start;
+		Color_Format _format = COLOR_RGB;
 
 		void Active(void);
 		void Idle(void);

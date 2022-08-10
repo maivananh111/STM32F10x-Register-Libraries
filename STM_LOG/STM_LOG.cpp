@@ -6,11 +6,11 @@
  */
 
 
+#include "SYSCLK_F1.h"
 #include "STM_LOG.h"
 #include "string.h"
 #include "stdlib.h"
 #include "stm32f1xx.h"
-#include "System_Clock_F1.h"
 
 static const char *COLOR_END = "\033[0m";
 static const char *LOG_COLOR[] = {

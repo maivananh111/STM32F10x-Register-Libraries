@@ -5,18 +5,17 @@
  *      Author: A315-56
  */
 
+#include "SYSCLK_F1.h"
 #include "TFT_ST7735.h"
 #include "malloc.h"
 #include "string.h"
 
-#include "System_Clock_F1.h"
 #include "DMA_F1.h"
 #include "GPIO_F1.h"
 #include "Font.h"
 
 
 
-DMA *tft_lcd_dmatx;
 static SPI<uint8_t> *_spi;
 
 volatile uint8_t dma_tft_flag = 0;
@@ -100,7 +99,6 @@ static const uint8_t init_cmds1[] = {            // Init for 7735R, part 1 (red 
 	  100  					  //     100 ms delay
 };
 
-
 TFT_ST7735::TFT_ST7735(GPIO_TypeDef *CS_PORT, uint16_t CS_PIN, GPIO_TypeDef *RST_PORT, uint16_t RST_PIN, GPIO_TypeDef *DC_PORT, uint16_t DC_PIN){
 	CS_Port  = CS_PORT;
 	RST_Port = RST_PORT;
@@ -109,7 +107,9 @@ TFT_ST7735::TFT_ST7735(GPIO_TypeDef *CS_PORT, uint16_t CS_PIN, GPIO_TypeDef *RST
 	CS_Pin  = CS_PIN;
 	RST_Pin = RST_PIN;
 	DC_Pin  = DC_PIN;
+	X_Start = 0, Y_Start = 0;
 }
+
 void TFT_ST7735::Active(void) {
 	GPIO_Reset(CS_Port, CS_Pin);
 }
@@ -160,17 +160,13 @@ void TFT_ST7735::InitCommandList(const uint8_t *addr) {
 	}
 }
 
-void TFT_ST7735::Init(SPI<uint8_t> *spi, DMA *dma, Color_Format Format) {
+void TFT_ST7735::Init(SPI<uint8_t> *spi, Color_Format Format) {
 	_format = Format;
-	tft_lcd_dmatx = dma;
 	_spi = spi;
 	/* GPIO FOR TFT LCD */
 	GPIO_Mode(CS_Port, CS_Pin, GPIO_Output_PushPull);
 	GPIO_Mode(RST_Port, RST_Pin, GPIO_Output_PushPull);
 	GPIO_Mode(DC_Port, DC_Pin, GPIO_Output_PushPull);
-	/* SPI DMA INIT */
-    tft_lcd_dmatx -> Init(DMA_Circular, DMA_MEM_TO_PERIPH, DMA_Data8Bit, DMA_Priority_VeryHigh);
-	_spi->HalfDuplexMaster_Init(SPI_CLKDiv2, SPI_Data8Bit, SPI_DataMSB, CPOL_0_CPHA_0, 0);
 
 	Active();
 	Reset();
@@ -241,8 +237,9 @@ void TFT_ST7735::WriteColor(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, 
 	SetAddressWindow(x1, y1, x2, y2);
 	EnableWrite();
 
-	_spi -> Transmit_DMA(*tft_lcd_dmatx, Data, size); // Gửi phần đủ trước.
+	_spi -> Transmit_DMA(Data, size);
 	while(!dma_tft_flag);
+	_spi -> Stop_Transmit_DMA();
 	dma_tft_flag = 0;
 
 	Idle();
@@ -361,15 +358,8 @@ void TFT_ST7735::DrawMkrEBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, 
 		}
 	}
 	dma_tft_cnt = 1;
-	SetAddressWindow(x, y, x+w-1, y+h-1);
-	Active();
-	EnableWrite();
+	WriteColor(x, y, x+w-1, y+h-1, disp_buf, disp_buf_size);
 
-	_spi -> Transmit_DMA(*tft_lcd_dmatx, disp_buf, disp_buf_size);
-	while(!dma_tft_flag);
-	dma_tft_flag = 0;
-
-	Idle();
 	free(disp_buf);
 }
 
@@ -443,14 +433,9 @@ uint8_t TFT_ST7735::DrawChar(uint16_t x, uint16_t y, Font Font, uint16_t Color, 
 			}
 		}
 	}
-	SetAddressWindow(x, y, x+Font.w-1, y+Font.h-1);
-	Active();
-	EnableWrite();
+
 	dma_tft_cnt = 1;
-	_spi -> Transmit_DMA(*tft_lcd_dmatx, disp_buf, disp_buf_size);
-	while(!dma_tft_flag);
-	dma_tft_flag = 0;
-	Idle();
+	WriteColor(x, y, x+Font.w-1, y+Font.h-1, disp_buf, disp_buf_size);
 
 	free(disp_buf);
 	return char_offset;

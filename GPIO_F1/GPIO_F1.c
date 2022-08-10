@@ -82,14 +82,14 @@ void GPIO_AFOutput(GPIO_TypeDef *gpio_port, uint16_t gpio_pin, GPIO_AF_MODE mode
 	if(gpio_pin < 8) { // GPIO0-7.
 		gpio_port -> CRL &=~ (3UL << (2 + gpio_pin*4)); // CLEAR CNF.
 		gpio_port -> CRL |= (3UL << gpio_pin*4);// SET MODE OUTPUT HIGH SPEED.
-		if(mode <= GPIO_AF_OpenDrain) gpio_port -> CRL |= (3UL << (2 + gpio_pin*4));
+		if(mode == GPIO_AF_OpenDrain) gpio_port -> CRL |= (3UL << (2 + gpio_pin*4));
 		else gpio_port -> CRL |= (2UL << (2 + gpio_pin*4));
 	}
 
 	else { // GPIO8-15.
 		gpio_port -> CRH &=~ (3UL << (2 + (gpio_pin-8)*4)); // CLEAR CNF.
 		gpio_port -> CRH |= (3UL << (gpio_pin-8)*4);// SET MODE OUTPUT HIGH SPEED.
-		if(mode <= GPIO_AF_OpenDrain) gpio_port -> CRH |= (3UL << (2 + (gpio_pin-8)*4));
+		if(mode == GPIO_AF_OpenDrain) gpio_port -> CRH |= (3UL << (2 + (gpio_pin-8)*4));
 		else gpio_port -> CRH |= (2UL << (2 + (gpio_pin-8)*4));
 
 	}
@@ -97,12 +97,8 @@ void GPIO_AFOutput(GPIO_TypeDef *gpio_port, uint16_t gpio_pin, GPIO_AF_MODE mode
 
 
 void GPIO_Analog(GPIO_TypeDef *gpio_port, uint16_t gpio_pin){
-	if(gpio_pin < 8){
-		gpio_port -> CRL &=~ (0x0F << (4*gpio_pin));
-	}
-	else{
-		gpio_port -> CRH &=~ (0x0F << (4*(gpio_pin-8)));
-	}
+	if(gpio_pin < 8) gpio_port -> CRL &=~ (0x0F << (4*gpio_pin));
+	else             gpio_port -> CRH &=~ (0x0F << (4*(gpio_pin-8)));
 }
 
 
@@ -116,11 +112,11 @@ void GPIO_Pulldown(GPIO_TypeDef *gpio_port, uint16_t gpio_pin){
 }
 
 void GPIO_Set(GPIO_TypeDef *gpio_port, uint16_t gpio_pin){
-	gpio_port -> BSRR |= (1<<gpio_pin);
+	gpio_port -> BSRR |= (1 << gpio_pin);
 }
 
 void GPIO_Reset(GPIO_TypeDef *gpio_port, uint16_t gpio_pin){
-	gpio_port -> BSRR |= (1<<(gpio_pin + 16));
+	gpio_port -> BSRR |= (1 << (gpio_pin + 16));
 }
 
 int GPIO_Read(GPIO_TypeDef *gpio_port, uint16_t gpio_pin){

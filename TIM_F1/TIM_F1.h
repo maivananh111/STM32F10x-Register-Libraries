@@ -11,6 +11,7 @@
 
 #include "stdio.h"
 #include "DMA_F1.h"
+#include "MVA_DEF.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,18 +50,19 @@ class TIM{
 		TIM(TIM_TypeDef *Timer, TIM_Channel Channel);
 
 		/* Basic TIMER */
-		void Base_Init(uint16_t psc, uint16_t arr);
-		void Start_DMA(DMA dma, uint16_t *count_buf, uint16_t size);
+		Result_t Base_Init(uint16_t psc, uint16_t arr);
+		Result_t Start_DMA(DMA dma, uint16_t *count_buf, uint16_t size);
+		Result_t Stop_DMA(DMA dma);
 		void ResetCounter(void);
 		uint16_t GetCounter(void);
 		void Delay_us(uint16_t us);
 		void Delay_ms(uint16_t ms);
 
 		/* TIMER PWM Mode */
-		void PWM_Init(TIM_Channel Channel, GPIO_TypeDef *ChannelPort, uint16_t ChannelPin, TIM_PWMMode PWMMode, uint16_t psc, uint16_t arr);
+		Result_t PWM_Init(TIM_Channel Channel, GPIO_TypeDef *ChannelPort, uint16_t ChannelPin, TIM_PWMMode PWMMode, uint16_t psc, uint16_t arr);
 		void PWM_SetDuty(TIM_Channel Channel, uint16_t pwm);
-		void PWM_Start_DMA(TIM_Channel Channel, DMA dma, uint16_t *pwm, uint16_t size);
-		void PWM_Stop_DMA(TIM_Channel Channel, DMA dma);
+		Result_t PWM_Start_DMA(TIM_Channel Channel, DMA dma, uint16_t *pwm, uint16_t size);
+		Result_t PWM_Stop_DMA(TIM_Channel Channel, DMA dma);
 
 		/* TIMER Encoder Mode */
 		void Encoder_Init(GPIO_TypeDef *Port, uint16_t T1Pin, uint16_t T2Pin);

@@ -11,6 +11,7 @@
 #include "stdio.h"
 #include "stm32f1xx.h"
 #include "DMA_F1.h"
+#include "MVA_DEF.h"
 
 //#define USE_USART1_ISR
 //#define USE_USART2_ISR
@@ -27,29 +28,34 @@ typedef enum{
 	USART_INTR_DMA
 } USART_Type;
 
-typedef enum{
-	USART_CLKNoDiv = 1,
-	USART_CLKDiv2  = 2,
-	USART_CLKDiv4  = 4,
-	USART_CLKDiv8  = 8,
-	USART_CLKDiv16 = 16,
-} USART_CLKDiv;
+typedef struct{
+	USART_Type Type = USART_INTR;
+	uint32_t Baudrate;
+	GPIO_TypeDef *Port;
+	uint16_t TxPin;
+	uint16_t RxPin;
+	DMA *TxDma = NULL;
+	DMA *RxDma = NULL;
+} USART_Config;
 
 class USART {
 	public:
-		USART(USART_TypeDef *usart, USART_CLKDiv CLKDiv = USART_CLKNoDiv, USART_Type Type = USART_No_INTR);
-		void Init(uint32_t Baudrate, GPIO_TypeDef *Port, uint16_t TxPin, uint16_t RxPin);
-		void Transmit(uint8_t Data);
-		void TransmitDMA(DMA dmatx, uint8_t *TxData, uint16_t Length);
-		void SendString(char *String);
-		uint8_t Receive(void);
-		void ReceiveDMA(DMA dmarx, uint8_t *RxData, uint16_t Length);
-		void TransmitStopDMA(DMA dmatx);
-		void ReceiveStopDMA(DMA dmarx);
+		USART(USART_TypeDef *usart);
+		void Init(USART_Config usart_conf);
 
+		Result_t Transmit(uint8_t Data);
+		Result_t SendString(char *String);
+		Result_t Receive(uint8_t *Data);
+
+		Result_t TransmitDMA(uint8_t *TxData, uint16_t Length);
+		Result_t ReceiveDMA(uint8_t *RxData, uint16_t Length);
+
+		Result_t Stop_Transmit_DMA(void);
+		Result_t Stop_Receive_DMA(void);
+
+		DMA *_txdma, *_rxdma;
 	private:
 		USART_TypeDef *_usart;
-		USART_CLKDiv _div;
 		USART_Type _type;
 //		uint8_t _usart_num = 1;
 };

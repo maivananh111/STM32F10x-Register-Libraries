@@ -10,7 +10,7 @@
 
 #include "stdio.h"
 #include "stm32f1xx.h"
-
+#include "MVA_DEF.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,19 +48,24 @@ typedef enum{
 	DMA_Priority_VeryHigh
 } DMA_Priority;
 
-typedef enum{
-	DMA_State_Idle = 0,
-	DMA_State_Busy
-}DMA_State;
+
+typedef struct{
+	DMA_Mode DMAMode;
+	DMA_DataDirection Direction;
+	DMA_DataSize DataSize;
+	DMA_Priority DMAPriority = DMA_Priority_VeryHigh;
+	uint32_t INTRPriority = 0;
+} DMA_Config;
 
 class DMA{
 	public:
 		/* Create new dma oop */
-		DMA(DMA_Channel_TypeDef *DMA_CHANNEL, uint32_t INTRp);
+		DMA(DMA_Channel_TypeDef *DMA_CHANNEL);
 		/* Dma init */
-		void Init(DMA_Mode MODE, DMA_DataDirection DIR, DMA_DataSize SIZE, DMA_Priority PRIORITY);
+		void Init(DMA_Config dma_conf);
 		/* Dma configuration to use */
-		void Start(uint32_t Source_Addr, uint32_t Dest_Addr, uint16_t Data_Size);
+		Result_t Start(uint32_t Source_Addr, uint32_t Dest_Addr, uint16_t Data_Size);
+		Result_t Stop(void);
 
 		void SetMode(DMA_Mode MODE);
 		void SetDirection(DMA_DataDirection DIR);
@@ -70,7 +75,8 @@ class DMA{
 		void Disable(void);
 		void Enable_IT(uint32_t IT);
 		void Disable_IT(uint32_t IT);
-		void Stop(void);
+
+
 
 	private:
 		DMA_Channel_TypeDef *_dmach;
@@ -83,7 +89,7 @@ class DMA{
 		DMA_Priority _priority;
 		uint8_t _dma_channel_num = 0;
 
-		DMA_State _state = DMA_State_Idle;
+		Status_t dma_status;
 };
 #ifdef USE_DMA1_Channel1
 void DMA1_Channel1_IRQHandler(void);

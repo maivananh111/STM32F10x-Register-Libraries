@@ -13,7 +13,15 @@
 
 #include "DMA_F1.h"
 #include "GPIO_F1.h"
+#include "MVA_DEF.h"
+#include "STM_LOG.h"
 
+#define SPI_TIMEOUT 100U
+
+typedef enum{
+	FullDuplexMaster = 0,
+	HalfDuplexMaster = 1,
+} SPI_Mode;
 
 typedef enum{
 	SPI_Normal_or_DMA = 0,
@@ -50,238 +58,376 @@ typedef enum{
 	CPOL_1_CPHA_1,
 } SPI_CLKMode;
 
+typedef struct{
+	SPI_Mode SPIMode          = FullDuplexMaster;
+	SPI_Type SPIType          = SPI_Normal_or_DMA;
+	SPI_DataSize DataSize     = SPI_Data8Bit;
+	SPI_DataFormat DataFormat = SPI_DataMSB;
+	SPI_CLKDiv ClockDiv       = SPI_CLKDiv2;
+	SPI_CLKMode ClockMode     = CPOL_0_CPHA_0;
+	uint8_t INTRPriority      = 0;
+	GPIO_TypeDef *Port;
+	uint16_t MOSIPin;
+	uint16_t MISOPin;
+	uint16_t CLKPin;
+	bool PeriphRemap = false;
+	DMA *TxDma = NULL;
+	DMA *RxDma = NULL;
+} SPI_Config;
+
 template <typename DataSize>
 class SPI{
 	public:
-		SPI(SPI_TypeDef *SPI, SPI_Type TYPE, GPIO_TypeDef *Port, uint16_t MOSIPin, uint16_t MISOPin, uint16_t CLKPin);
-		SPI_TypeDef *FullDuplexMaster_Init(SPI_CLKDiv DIV, SPI_DataSize SIZE, SPI_DataFormat FORMAT, SPI_CLKMode CLKMODE, uint8_t INTR_Priority = 0);
-		SPI_TypeDef *HalfDuplexMaster_Init(SPI_CLKDiv DIV, SPI_DataSize SIZE, SPI_DataFormat FORMAT, SPI_CLKMode CLKMODE, uint8_t INTR_Priority = 0);
-		void Transmit(DataSize DATA);
-		void Transmit(DataSize *DATA, uint32_t Size);
-		DataSize Receive(void);
-		void Receive(DataSize *DATA, uint32_t Size);
-		DataSize Transmit_Receive(DataSize DATA);
-		void Transmit_Receive(DataSize *TxDATA, DataSize *RxDATA, uint16_t Size);
-		void Transmit_DMA(DMA SPI_DMA, DataSize *DATA, uint16_t Size);
-		void Receive_DMA (DMA SPI_DMA, DataSize *DATA, uint16_t Size);
-		void Transmit_Receive_DMA(DMA Tx_Dma, DMA Rx_Dma, DataSize *TxData, DataSize *RxData, uint16_t Size);
-		void Stop_DMA(DMA dma);
+		SPI(SPI_TypeDef *SPI);
+
+		SPI_TypeDef *Init(SPI_Config spi_conf);
+
+		Result_t Transmit(DataSize Data);
+		Result_t Transmit(DataSize *Data, uint32_t Size);
+
+		Result_t Receive(DataSize *Data);
+		Result_t Receive(DataSize *Data, uint32_t Size);
+
+		Result_t Transmit_Receive(DataSize TxData, DataSize *RxData);
+		Result_t Transmit_Receive(DataSize *TxData, DataSize *RxData, uint16_t Size);
+
+		Result_t Transmit_DMA(DataSize *Data, uint16_t Size);
+		Result_t Receive_DMA(DataSize *Data, uint16_t Size);
+
+		Result_t Transmit_Receive_DMA(DataSize *TxData, DataSize *RxData, uint16_t Size);
+
+		Result_t Stop_Transmit_DMA(void);
+		Result_t Stop_Receive_DMA(void);
+
+		DMA *_txdma, *_rxdma;
+		SPI_TypeDef *_spi;
 
 	private:
 		uint8_t spi_num = 1;
-		SPI_TypeDef *_spi;
-		SPI_Type _type;
-		SPI_CLKDiv _div;
-		SPI_DataSize _size;
-		SPI_DataFormat _format;
-		SPI_CLKMode _clkmode;
 
-		GPIO_TypeDef *_port;
-		uint16_t _miso, _mosi, _clk;
+		SPI_Mode _mode;
+		SPI_Type _type;
+
 };
 
 template <typename DataSize>
-SPI<DataSize>::SPI(SPI_TypeDef *SPI, SPI_Type TYPE, GPIO_TypeDef *Port, uint16_t MOSIPin, uint16_t MISOPin, uint16_t CLKPin){
+SPI<DataSize>::SPI(SPI_TypeDef *SPI){
 	_spi  = SPI;
-	_type = TYPE;
-	_port = Port;
-	_miso = MISOPin;
-	_mosi = MOSIPin;
-	_clk  = CLKPin;
+	_mode = FullDuplexMaster;
+	_type = SPI_Normal_or_DMA;
 }
 
 template <typename DataSize>
-SPI_TypeDef *SPI<DataSize>::FullDuplexMaster_Init(SPI_CLKDiv DIV, SPI_DataSize SIZE, SPI_DataFormat FORMAT, SPI_CLKMode CLKMODE, uint8_t INTR_Priority){
-	_div = DIV;
-	_size = SIZE;
-	_format = FORMAT;
-	_clkmode = CLKMODE;
+SPI_TypeDef *SPI<DataSize>::Init(SPI_Config spi_conf){
+	_mode  = spi_conf.SPIMode;
+	_type  = spi_conf.SPIType;
+	_txdma = spi_conf.TxDma;
+	_rxdma = spi_conf.RxDma;
 
 	/* ENABLE SPI CLOCK */
 	if     (_spi == SPI1) RCC -> APB2ENR |= RCC_APB2ENR_SPI1EN;
 	else if(_spi == SPI2) RCC -> APB1ENR |= RCC_APB1ENR_SPI2EN;
 
-	if     (_port == GPIOA) RCC -> APB2ENR |= RCC_APB2ENR_IOPAEN;
-	else if(_port == GPIOB) RCC -> APB2ENR |= RCC_APB2ENR_IOPBEN;
-	else if(_port == GPIOC) RCC -> APB2ENR |= RCC_APB2ENR_IOPCEN;
-	GPIO_AFOutput(_port, _clk, GPIO_AF_PushPull);
-	GPIO_AFOutput(_port, _mosi, GPIO_AF_PushPull);
-	GPIO_Mode(_port, _miso, GPIO_Input_Floating);
+	if     (spi_conf.Port == GPIOA) RCC -> APB2ENR |= RCC_APB2ENR_IOPAEN;
+	else if(spi_conf.Port == GPIOB) RCC -> APB2ENR |= RCC_APB2ENR_IOPBEN;
+	else if(spi_conf.Port == GPIOC) RCC -> APB2ENR |= RCC_APB2ENR_IOPCEN;
+	GPIO_AFOutput(spi_conf.Port, spi_conf.CLKPin, GPIO_AF_PushPull);
+	GPIO_AFOutput(spi_conf.Port, spi_conf.MOSIPin, GPIO_AF_PushPull);
+	if(_mode == FullDuplexMaster) GPIO_Mode(spi_conf.Port, spi_conf.MISOPin, GPIO_Input_Floating);
+	if(spi_conf.PeriphRemap && _spi == SPI1) GPIO_Remap(SPI1_Remap);
 
-	/* ENABLE SPI FULL DUPLEX MASTER, SOFTWARE SS */
+	/* ENABLE SPI MASTER, SOFTWARE SS */
 	_spi -> CR1 &=~ SPI_CR1_RXONLY;
-	_spi -> CR1 |= SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_MSTR | _size | _format | (_div << SPI_CR1_BR_Pos) | _clkmode | SPI_CR1_SPE;
-	_spi -> CR2 |= _type;
+	_spi -> CR1 |= SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_MSTR | spi_conf.DataSize | spi_conf.DataFormat | (spi_conf.ClockDiv << SPI_CR1_BR_Pos) | spi_conf.ClockMode | SPI_CR1_SPE;
+	if(_mode == HalfDuplexMaster) _spi -> CR1 |= SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE;
+	_spi -> CR2 |= spi_conf.SPIType;
+
 	/* ENABLE SPI INTERRUPT */
 	if(_type > SPI_Normal_or_DMA){
 		IRQn_Type IRQ;
 		if     (_spi == SPI1) IRQ = SPI1_IRQn;
 		else if(_spi == SPI2) IRQ = SPI2_IRQn;
-		__NVIC_SetPriority(IRQ, INTR_Priority);
+		__NVIC_SetPriority(IRQ, spi_conf.INTRPriority);
 		__NVIC_EnableIRQ(IRQ);
 	}
 	return _spi;
 }
 
 template <typename DataSize>
-SPI_TypeDef *SPI<DataSize>::HalfDuplexMaster_Init(SPI_CLKDiv DIV, SPI_DataSize SIZE, SPI_DataFormat FORMAT, SPI_CLKMode CLKMODE, uint8_t INTR_Priority){
-	_div = DIV;
-	_size = SIZE;
-	_format = FORMAT;
-	_clkmode = CLKMODE;
-	/* ENABLE SPI CLOCK */
-	if     (_spi == SPI1) RCC -> APB2ENR |= RCC_APB2ENR_SPI1EN;
-	else if(_spi == SPI2) RCC -> APB1ENR |= RCC_APB1ENR_SPI2EN;
+Result_t SPI<DataSize>::Transmit(DataSize *Data, uint32_t Size){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
 
-	if     (_port == GPIOA) RCC -> APB2ENR |= RCC_APB2ENR_IOPAEN;
-	else if(_port == GPIOB) RCC -> APB2ENR |= RCC_APB2ENR_IOPBEN;
-	else if(_port == GPIOC) RCC -> APB2ENR |= RCC_APB2ENR_IOPCEN;
-	GPIO_AFOutput(_port, _clk, GPIO_AF_PushPull);
-	GPIO_AFOutput(_port, _mosi, GPIO_AF_PushPull);
-
-	/* ENABLE SPI HALF DUPLEX MASTER 1 LINE MODE, SOFTWARE SS */
-	_spi -> CR1 |= SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_MSTR | _size | _format | (_div << SPI_CR1_BR_Pos) | _clkmode | SPI_CR1_SPE;
-	_spi -> CR1 &=~ SPI_CR1_RXONLY;
-	_spi -> CR2 |= _type;
-	/* ENABLE SPI INTERRUPT */
-	if(_type > SPI_Normal_or_DMA){
-		IRQn_Type IRQ;
-		if     (_spi == SPI1) IRQ = SPI1_IRQn;
-		else if(_spi == SPI2) IRQ = SPI2_IRQn;
-		__NVIC_SetPriority(IRQ, INTR_Priority);
-		__NVIC_EnableIRQ(IRQ);
+	uint32_t TxCount = Size;
+	while(TxCount--){
+		res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_TXE, FLAG_SET, SPI_TIMEOUT);
+		if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+	   _spi -> DR = *Data++;
 	}
-	return _spi;
-}
 
-template <typename DataSize>
-void SPI<DataSize>::Transmit(DataSize *DATA, uint32_t Size){
-	uint32_t i = 0;
-	while(i < Size){
-	   while (!((_spi -> SR) & SPI_SR_TXE));
-	   _spi -> DR = DATA[i];
-	   i++;
-	}
-	while (!((_spi -> SR) & SPI_SR_TXE));
-	while (((_spi -> SR) & SPI_SR_BSY));
-	DataSize temp = _spi -> DR;
-	temp = _spi -> SR;
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_TXE, FLAG_SET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_BSY, FLAG_RESET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	DataSize temp = _spi -> DR | _spi -> SR;
 	(void)temp;
+
+	return res;
 }
 
 template <typename DataSize>
-void SPI<DataSize>::Receive(DataSize *DATA, uint32_t Size){
-	uint32_t i = Size;
-	while(i){
-		while (((_spi -> SR) & SPI_SR_BSY));
+Result_t SPI<DataSize>::Receive(DataSize *Data, uint32_t Size){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
+	if(_mode == HalfDuplexMaster){
+		res.Status = UNAVAILABLE;
+		res.CodeLine = __LINE__;
+		return res;
+	}
+
+	uint32_t RxCount = Size;
+	while(RxCount--){
+		res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_BSY, FLAG_RESET, SPI_TIMEOUT);
+		if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
 		_spi -> DR = 0x00;
-		while (!((_spi -> SR) & SPI_SR_RXNE));
-		*DATA++ = (_spi -> DR);
-		i--;
+
+		res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_RXNE, FLAG_SET, SPI_TIMEOUT);
+		if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+		*Data++ = (uint8_t)(_spi -> DR);
 	}
+	return res;
 }
 
 template <typename DataSize>
-void SPI<DataSize>::Transmit(DataSize DATA){
-	while (!((_spi -> SR) & SPI_SR_TXE));
-	_spi -> DR = DATA;
-	while (!((_spi -> SR) & SPI_SR_TXE));
-	while (((_spi -> SR) & SPI_SR_BSY));
-	DataSize temp = _spi -> DR;
-	temp = _spi -> SR;
+Result_t SPI<DataSize>::Transmit(DataSize Data){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_TXE, FLAG_SET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	_spi -> DR = Data;
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_TXE, FLAG_SET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_BSY, FLAG_RESET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	DataSize temp = _spi -> DR | _spi -> SR;
 	(void)temp;
+
+	return res;
 }
 
 template <typename DataSize>
-DataSize SPI<DataSize>::Receive(void){
-	while(!(_spi -> SR & SPI_SR_RXNE));
-	DataSize temp = _spi -> DR;
-	return temp;
-}
+Result_t SPI<DataSize>::Receive(DataSize *Data){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
 
-template <typename DataSize>
-DataSize SPI<DataSize>::Transmit_Receive(DataSize DATA){
-	while (((_spi -> SR) & SPI_SR_BSY));
-	_spi -> DR = DATA;
-	while (!((_spi -> SR) & SPI_SR_TXE));
-	while (!((_spi -> SR) & SPI_SR_RXNE));
-	DataSize temp = _spi -> DR;
-	return temp;
-}
-
-template <typename DataSize>
-void SPI<DataSize>::Transmit_Receive(DataSize *TxDATA, DataSize *RxDATA, uint16_t Size){
-	uint32_t byte_writed = Size;
-	while(byte_writed){
-		/* WAIT FOR TX DATA IS EMPTY */
-		while(!(_spi -> SR & SPI_SR_TXE));
-		/* TRANSMIT DATA */
-		_spi -> DR = *TxDATA++;
-		*RxDATA++ = Receive();
-		byte_writed--;
+	if(_mode == HalfDuplexMaster){
+		res.Status = UNAVAILABLE;
+		res.CodeLine = __LINE__;
+		return res;
 	}
-	/* WAIT FOR TX DATA IS EMPTY */
-	while(!(_spi -> SR & SPI_SR_TXE));
-	/* WAIT FOR BSY BIT RESET */
-	while((_spi -> SR & SPI_SR_BSY));
-	/* READ DR AND SR REGISTER FOR CLEAR OVERRUN */
-	__IO uint32_t ovr = _spi -> DR;
-	ovr = _spi -> SR;
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_RXNE, FLAG_SET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	*Data = _spi -> DR;
+
+	return res;
+}
+
+template <typename DataSize>
+Result_t SPI<DataSize>::Transmit_Receive(DataSize TxData, DataSize *RxData){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
+	if(_mode == HalfDuplexMaster){
+		res.Status = UNAVAILABLE;
+		res.CodeLine = __LINE__;
+		return res;
+	}
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_BSY, FLAG_RESET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	_spi -> DR = TxData;
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_TXE, FLAG_SET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_RXNE, FLAG_SET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	*RxData = (uint8_t)(_spi -> DR);
+
+	return res;
+}
+
+template <typename DataSize>
+Result_t SPI<DataSize>::Transmit_Receive(DataSize *TxData, DataSize *RxData, uint16_t Size){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
+	if(_mode == HalfDuplexMaster){
+		res.Status = UNAVAILABLE;
+		res.CodeLine = __LINE__;
+		return res;
+	}
+
+	uint32_t TxRxCount = Size;
+	while(TxRxCount--){
+		res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_TXE, FLAG_SET, SPI_TIMEOUT);
+		if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+		_spi -> DR = *TxData++;
+		Receive(RxData++);
+	}
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_TXE, FLAG_SET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	res = WaitFlagTimeout(&(_spi -> SR), SPI_SR_BSY, FLAG_RESET, SPI_TIMEOUT);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	__IO uint32_t ovr = _spi -> DR | _spi -> SR;
 	(void)ovr;
+
+	return res;
 }
 
 template <typename DataSize>
-void SPI<DataSize>::Transmit_DMA(DMA SPI_DMA, DataSize *DATA, uint16_t Size){
-	/* DISABLE SPI */
+Result_t SPI<DataSize>::Transmit_DMA(DataSize *Data, uint16_t Size){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
 	_spi -> CR1 &=~ SPI_CR1_SPE;
-	/* DISABLE SPI TRANSMIT WITH DMA */
 	_spi -> CR2 &=~ SPI_CR2_TXDMAEN;
-	/* SETUP DMA */
-	SPI_DMA.SetDirection(DMA_MEM_TO_PERIPH);
-	SPI_DMA.Start((uint32_t)DATA, (uint32_t)&_spi -> DR, Size);
-	/* ENABLE SPI TRANSMIT WITH DMA */
+
+	_txdma -> SetDirection(DMA_MEM_TO_PERIPH);
+	res = _txdma -> Start((uint32_t)Data, (uint32_t)&_spi -> DR, Size);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
 	_spi -> CR2 |= SPI_CR2_TXDMAEN;
-	/* ENABLE SPI */
 	_spi -> CR1 |= SPI_CR1_SPE;
+
+	return res;
 }
 
 template <typename DataSize>
-void SPI<DataSize>::Receive_DMA (DMA SPI_DMA, DataSize *DATA, uint16_t Size){
-	/* DISABLE SPI */
+Result_t SPI<DataSize>::Receive_DMA(DataSize *Data, uint16_t Size){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
+	if(_mode == HalfDuplexMaster){
+		res.Status = UNAVAILABLE;
+		res.CodeLine = __LINE__;
+		return res;
+	}
+
 	_spi -> CR1 &=~ SPI_CR1_SPE;
-	/* DISABLE SPI RECEIVE WITH DMA */
 	_spi -> CR2 &=~ SPI_CR2_RXDMAEN;
-	/* SETUP DMA */
-	SPI_DMA.SetDirection(DMA_PERIPH_TO_MEM);
-	SPI_DMA.Start((uint32_t)&_spi -> DR, (uint32_t)DATA, Size);
-	/* ENABLE SPI RECEIVE WITH DMA */
+
+	_rxdma -> SetDirection(DMA_PERIPH_TO_MEM);
+	_rxdma -> Start((uint32_t)&_spi -> DR, (uint32_t)Data, Size);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
 	_spi -> CR2 |= SPI_CR2_RXDMAEN;
-	/* ENABLE SPI */
 	_spi -> CR1 |= SPI_CR1_SPE;
+
+	return res;
 }
 
 template <typename DataSize>
-void SPI<DataSize>::Transmit_Receive_DMA(DMA Tx_Dma, DMA Rx_Dma, DataSize *TxData, DataSize *RxData, uint16_t Size){
-	/* DISABLE SPI */
+Result_t SPI<DataSize>::Transmit_Receive_DMA(DataSize *TxData, DataSize *RxData, uint16_t Size){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
+	if(_mode == HalfDuplexMaster){
+		res.Status = UNAVAILABLE;
+		res.CodeLine = __LINE__;
+		return res;
+	}
+
 	_spi -> CR1 &=~ SPI_CR1_SPE;
-	/* DISABLE SPI TRANSMIT AND RECEIVE WITH DMA */
 	_spi -> CR2 &=~ (SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN);
-	/* SETUP SPI RECEIVE DMA */
-	Rx_Dma.SetDirection(DMA_PERIPH_TO_MEM);
-	Rx_Dma.Start((uint32_t)&_spi -> DR, (uint32_t)RxData, Size);
-	/* SETUP SPI TRANSMIT DMA */
-	Tx_Dma.SetDirection(DMA_MEM_TO_PERIPH);
-	Tx_Dma.Start((uint32_t)TxData, (uint32_t)&_spi -> DR, Size);
-	/* ENABLE SPI TRANSMIT AND RECEIVE WITH DMA */
+
+	_rxdma -> SetDirection(DMA_PERIPH_TO_MEM);
+	res = _rxdma -> Start((uint32_t)&_spi -> DR, (uint32_t)RxData, Size);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+	_txdma -> SetDirection(DMA_MEM_TO_PERIPH);
+	res = _txdma -> Start((uint32_t)TxData, (uint32_t)&_spi -> DR, Size);
+	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
 	_spi -> CR2 |= SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN;
-	/* ENABLE SPI */
 	_spi -> CR1 |= SPI_CR1_SPE;
+
+	return res;
 }
 
 template <typename DataSize>
-void SPI<DataSize>::Stop_DMA(DMA dma){
-	dma.Stop();
-	_spi -> CR2 &=~ (SPI_CR2_RXDMAEN | SPI_CR2_TXDMAEN);
+Result_t SPI<DataSize>::Stop_Transmit_DMA(void){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+	if(_spi -> CR2 & SPI_CR2_TXDMAEN){
+		res = _txdma -> Stop();
+		if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+		_spi -> CR2 &=~ SPI_CR2_TXDMAEN;
+	}
+	else{
+		res.Status = ERR;
+		res.CodeLine = __LINE__;
+	}
+
+	return res;
+}
+
+template <typename DataSize>
+Result_t SPI<DataSize>::Stop_Receive_DMA(void){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+	if(_spi -> CR2 & SPI_CR2_RXDMAEN){
+		res = _rxdma -> Stop();
+		if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
+
+		_spi -> CR2 &=~ SPI_CR2_RXDMAEN;
+	}
+	else{
+		res.Status = ERR;
+		res.CodeLine = __LINE__;
+	}
+
+	return res;
 }
 
 

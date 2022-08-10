@@ -34,8 +34,6 @@ typedef struct {
 }w25qxx_t;
 extern w25qxx_t w25qxx;
 
-extern DMA *flash_dmatx, *flash_dmarx;
-extern SPI<uint8_t> *flash_spi;
 extern volatile uint8_t  dma_flash_tx_flag;
 extern volatile uint8_t  dma_flash_rx_flag;
 
@@ -43,7 +41,7 @@ class W25Q{
 	public:
 		W25Q(GPIO_TypeDef *CS_Port, uint16_t CS_Pin);
 		uint32_t ReadID(void);
-		uint16_t Init(SPI<uint8_t> *spi, DMA *dmatx, DMA *dmarx);
+		uint16_t Init(SPI<uint8_t> *spi);
 
 		void EraseSector(uint32_t SectorNum);
 //		void EraseBlock(uint32_t BlockAddr);

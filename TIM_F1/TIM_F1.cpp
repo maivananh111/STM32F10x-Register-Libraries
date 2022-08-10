@@ -5,11 +5,13 @@
  *      Author: A315-56
  */
 
+#include "SYSCLK_F1.h"
 #include "stm32f1xx.h"
 #include "stm32f103xb.h"
 #include "GPIO_F1.h"
 #include "TIM_F1.h"
 
+#define UIF_TIMEOUT 100U
 
 TIM::TIM(TIM_TypeDef *Timer, TIM_Direction Direction, TIM_Auto_RePreLoad ARPE){
 	_tim = Timer;
@@ -27,6 +29,8 @@ TIM::TIM(TIM_TypeDef *Timer, TIM_Direction Direction, TIM_Auto_RePreLoad ARPE){
 	else if(_tim == TIM4){
 		_tim_num = 4;
 	}
+	_dir = TIM_CountUp;
+	_arpe = TIM_AutoReload_Preload_Disable;
 }
 
 TIM::TIM(TIM_TypeDef *Timer, TIM_Channel Channel){
@@ -44,10 +48,16 @@ TIM::TIM(TIM_TypeDef *Timer, TIM_Channel Channel){
 	else if(_tim == TIM4){
 		_tim_num = 4;
 	}
+	_dir = TIM_CountUp;
+	_arpe = TIM_AutoReload_Preload_Disable;
 }
 
 /* TIM Basic */
-void TIM::Base_Init(uint16_t psc, uint16_t arr){
+Result_t TIM::Base_Init(uint16_t psc, uint16_t arr){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
 	if(_tim_num == 1) RCC -> APB2ENR |= RCC_APB2ENR_TIM1EN;
 	else RCC -> APB1ENR |= (1<<(_tim_num - 2));
 
@@ -57,15 +67,52 @@ void TIM::Base_Init(uint16_t psc, uint16_t arr){
 	_tim -> PSC = psc - 1;
 
 	_tim -> CR1 |= TIM_CR1_CEN;
-	while (!(_tim -> SR & TIM_SR_UIF));
+
+	res = WaitFlagTimeout(&(_tim -> SR), TIM_SR_UIF, FLAG_SET, UIF_TIMEOUT);
+	if(res.Status != OKE) res.CodeLine = __LINE__;
+	return res;
 }
 
-void TIM::Start_DMA(DMA dma, uint16_t *count_buf, uint16_t size){
+Result_t TIM::Start_DMA(DMA dma, uint16_t *count_buf, uint16_t size){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
 	_tim -> CR1  &=~ TIM_CR1_CEN;
 	_tim -> DIER &=~ TIM_DIER_CC1DE;
-	dma.Start((uint32_t)count_buf, (uint32_t)&_tim -> CNT, size);
+
+	res = dma.Start((uint32_t)count_buf, (uint32_t)&_tim -> CNT, size);
+	if(res.Status != OKE) {
+		res.CodeLine = __LINE__;
+		return res;
+	}
+
 	_tim -> DIER |= TIM_DIER_CC1DE;
 	_tim -> CR1  |= TIM_CR1_CEN;
+
+	return res;
+}
+
+Result_t TIM::Stop_DMA(DMA dma){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+	if(_tim -> DIER & TIM_DIER_CC1DE){
+		res = dma.Stop();
+		if(res.Status != OKE) {
+			res.CodeLine = __LINE__;
+			return res;
+		}
+		_tim -> DIER &=~ TIM_DIER_CC1DE;
+		_tim -> CR1  &=~ TIM_CR1_CEN;
+	}
+	else{
+		res.CodeLine = __LINE__;
+		res.Status = ERR;
+	}
+
+	return res;
 }
 
 void TIM::ResetCounter(void){
@@ -88,7 +135,12 @@ void TIM::Delay_ms(uint16_t ms){
 
 
 /* TIMER Mode PWM */
-void TIM::PWM_Init(TIM_Channel Channel, GPIO_TypeDef *ChannelPort, uint16_t ChannelPin, TIM_PWMMode PWMMode, uint16_t psc, uint16_t arr){
+Result_t TIM::PWM_Init(TIM_Channel Channel, GPIO_TypeDef *ChannelPort, uint16_t ChannelPin, TIM_PWMMode PWMMode, uint16_t psc, uint16_t arr){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
 	if(_tim_num == 1) RCC -> APB2ENR |= RCC_APB2ENR_TIM1EN;
 	else RCC -> APB1ENR |= (1<<(_tim_num - 2));
 
@@ -117,7 +169,11 @@ void TIM::PWM_Init(TIM_Channel Channel, GPIO_TypeDef *ChannelPort, uint16_t Chan
 	_tim -> CCER |= (TIM_CCER_CC1E << (Channel*4));
 
 	_tim -> CR1 |= TIM_CR1_CEN;
-	while (!(_tim -> SR & TIM_SR_UIF));
+
+	res = WaitFlagTimeout(&(_tim -> SR), TIM_SR_UIF, FLAG_SET, UIF_TIMEOUT);
+	if(res.Status != OKE) res.CodeLine = __LINE__;
+
+	return res;
 }
 
 void TIM::PWM_SetDuty(TIM_Channel Channel, uint16_t pwm){
@@ -137,7 +193,12 @@ void TIM::PWM_SetDuty(TIM_Channel Channel, uint16_t pwm){
 	};
 }
 
-void TIM::PWM_Start_DMA(TIM_Channel Channel, DMA dma, uint16_t *pwm, uint16_t size){
+Result_t TIM::PWM_Start_DMA(TIM_Channel Channel, DMA dma, uint16_t *pwm, uint16_t size){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+
 	_tim -> CCER &=~ (TIM_CCER_CC1E << (Channel*4));
 	_tim -> DIER &=~ TIM_DIER_CC1DE << Channel;
 	_tim -> CR1  &=~ TIM_CR1_CEN;
@@ -157,19 +218,40 @@ void TIM::PWM_Start_DMA(TIM_Channel Channel, DMA dma, uint16_t *pwm, uint16_t si
 			CCRx_addr = (uint32_t)&_tim -> CCR4;
 		break;
 	};
-	dma.Start((uint32_t)pwm, CCRx_addr, size);
-
+	res = dma.Start((uint32_t)pwm, CCRx_addr, size);
+	if(res.Status != OKE) {
+		res.CodeLine = __LINE__;
+		return res;
+	}
 	_tim -> DIER |= TIM_DIER_CC1DE << Channel;
 
 	_tim -> CCER |= (TIM_CCER_CC1E << (Channel*4));
 	_tim -> CR1  |= TIM_CR1_CEN;
+
+	return res;
 }
 
-void TIM::PWM_Stop_DMA(TIM_Channel Channel, DMA dma){
-	_tim -> DIER &=~ TIM_DIER_CC1DE << Channel;
-	dma.Stop();
-	_tim -> CCER &=~ (TIM_CCER_CC1E << (Channel*4));
-	_tim -> CR1  &=~ TIM_CR1_CEN;
+Result_t TIM::PWM_Stop_DMA(TIM_Channel Channel, DMA dma){
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+	if(_tim -> DIER & TIM_DIER_CC1DE << Channel){
+		_tim -> DIER &=~ TIM_DIER_CC1DE << Channel;
+		res = dma.Stop();
+		if(res.Status != OKE) {
+			res.CodeLine = __LINE__;
+			return res;
+		}
+		_tim -> CCER &=~ (TIM_CCER_CC1E << (Channel*4));
+		_tim -> CR1  &=~ TIM_CR1_CEN;
+	}
+	else{
+		res.CodeLine = __LINE__;
+		res.Status = ERR;
+	}
+
+	return res;
 }
 
 

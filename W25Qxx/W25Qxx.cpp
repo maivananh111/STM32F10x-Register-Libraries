@@ -4,12 +4,12 @@
  *  Created on: 2 thg 9, 2021
  *      Author: A315-56
  */
+#include "SYSCLK_F1.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include "W25Qxx.h"
 #include "GPIO_F1.h"
-#include "System_Clock_F1.h"
 #include "DMA_F1.h"
 
 
@@ -34,7 +34,6 @@
 
 w25qxx_t w25qxx;
 SPI<uint8_t> *flash_spi;
-DMA *flash_dmatx, *flash_dmarx;
 volatile uint8_t  dma_flash_tx_flag = 0;
 volatile uint8_t  dma_flash_rx_flag = 0;
 
@@ -67,15 +66,18 @@ uint8_t W25Q::ReadStatusREG(uint8_t StatusRegisterNum) {
 	switch(StatusRegisterNum){
 		case 1:
 			flash_spi -> Transmit(CMD_READ_STATUS_1);
-			status = w25qxx.SR1 = flash_spi -> Transmit_Receive(0x00);
+			flash_spi -> Transmit_Receive(0x00, &status);
+			w25qxx.SR1 = status;
 		break;
 		case 2:
 			flash_spi -> Transmit(CMD_READ_STATUS_2);
-			status = w25qxx.SR2 = flash_spi -> Transmit_Receive(0x00);
+			flash_spi -> Transmit_Receive(0x00, &status);
+			w25qxx.SR2 = status;
 		break;
 		case 3:
 			flash_spi -> Transmit(CMD_READ_STATUS_3);
-			status = w25qxx.SR3 = flash_spi -> Transmit_Receive(0x00);
+			flash_spi -> Transmit_Receive(0x00, &status);
+			w25qxx.SR3 = status;
 		break;
 	}
 	 CS_Idle();
@@ -113,7 +115,7 @@ void W25Q::WaitWriteEnd(void) {
 	CS_Active();
 	flash_spi -> Transmit(CMD_READ_STATUS_1);
     do {
-		w25qxx.SR1 = flash_spi -> Transmit_Receive(0x00);
+		flash_spi -> Transmit_Receive(0x00, &w25qxx.SR1);
 		Tick_Delay_ms(1);
     } while ((w25qxx.SR1 & STATUS_REG_BUSY));
     CS_Idle();
@@ -130,25 +132,22 @@ void W25Q::SetAddress(uint32_t Address){
 uint32_t W25Q::ReadID(void) {
     uint32_t ID = 0;
     uint8_t RxBuf[3];
+    uint8_t tmp = 0;
     CS_Idle();
     Tick_Delay_ms(100);
     CS_Active();
-    flash_spi -> Transmit_Receive(CMD_GET_JEDEC_ID);
+    flash_spi -> Transmit_Receive(CMD_GET_JEDEC_ID, &tmp);
     flash_spi -> Receive(RxBuf, 3);
     CS_Idle();
+    (void)tmp;
     ID = (uint32_t)(RxBuf[0]<<16) | (uint32_t)(RxBuf[1]<<8) | (uint32_t)RxBuf[2];
     return ID;
 }
 
-uint16_t W25Q::Init(SPI<uint8_t> *spi, DMA *dmatx, DMA *dmarx){
+uint16_t W25Q::Init(SPI<uint8_t> *spi){
 	flash_spi = spi;
-	flash_dmatx = dmatx;
-	flash_dmarx = dmarx;
-	GPIO_Mode(GPIOx, CS_pin, GPIO_Output_PushPull);
 
-	flash_dmarx -> Init(DMA_Normal, DMA_PERIPH_TO_MEM, DMA_Data8Bit, DMA_Priority_VeryHigh);
-	flash_dmatx -> Init(DMA_Normal, DMA_MEM_TO_PERIPH, DMA_Data8Bit, DMA_Priority_VeryHigh);
-	flash_spi -> FullDuplexMaster_Init(SPI_CLKDiv4, SPI_Data8Bit, SPI_DataMSB, CPOL_0_CPHA_0, 0);
+	GPIO_Mode(GPIOx, CS_pin, GPIO_Output_PushPull);
 
 	uint32_t id = ReadID();
 	switch(id & 0x000000FF){
@@ -234,8 +233,10 @@ void W25Q::ReadBytes(uint32_t BytesAddress, uint8_t *Data, uint16_t NumByteRead)
 
 	uint8_t *TxDummyBuf = (uint8_t *)malloc(NumByteRead * sizeof(uint8_t));
 	memset(TxDummyBuf, 0x00, NumByteRead);
-	flash_spi -> Transmit_Receive_DMA(*flash_dmatx, *flash_dmarx, TxDummyBuf, Data, (uint16_t)NumByteRead);
+	flash_spi -> Transmit_Receive_DMA(TxDummyBuf, Data, (uint16_t)NumByteRead);
 	while(!dma_flash_rx_flag);
+	flash_spi -> Stop_Receive_DMA();
+	flash_spi -> Stop_Transmit_DMA();
 	dma_flash_tx_flag = 0;
 	dma_flash_rx_flag = 0;
 	free(TxDummyBuf);
@@ -251,8 +252,9 @@ void W25Q::WriteBytes(uint32_t WriteAddr, uint8_t *Data, uint16_t NumByteWrite) 
     flash_spi -> Transmit(CMD_PAGE_PROGRAMM);
     SetAddress(WriteAddr);
 //    Transmit(Data, NumByteWrite);
-    flash_spi -> Transmit_DMA(*flash_dmatx, Data, (uint16_t)NumByteWrite);
+    flash_spi -> Transmit_DMA(Data, (uint16_t)NumByteWrite);
 	while(!dma_flash_tx_flag);
+	flash_spi -> Stop_Transmit_DMA();
 	dma_flash_tx_flag = 0;
 	CS_Idle();
 
