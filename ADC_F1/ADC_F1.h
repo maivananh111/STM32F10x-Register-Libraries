@@ -20,13 +20,13 @@ extern "C"{
 
 typedef enum{
 	ADC_1_5_CYCLES   = 0UL,  // 1.5 cycles
-	ADC_7_5_CYCLES   = 1UL,  // 7.5 cycles
-	ADC_13_5_CYCLES  = 2UL,  // 13.5 cycles
-	ADC_28_5_CYCLES  = 3UL,  // 28.5 cycles
-	ADC_41_5_CYCLES  = 4UL,  // 41.5 cycles
-	ADC_55_5_CYCLES  = 5UL,  // 55.5 cycles
-	ADC_71_5_CYCLES  = 6UL,  // 71.5 cycles
-	ADC_239_5_CYCLES = 7UL,  // 239.5 cycles
+	ADC_7_5_CYCLES,  // 7.5 cycles
+	ADC_13_5_CYCLES,  // 13.5 cycles
+	ADC_28_5_CYCLES,  // 28.5 cycles
+	ADC_41_5_CYCLES,  // 41.5 cycles
+	ADC_55_5_CYCLES,  // 55.5 cycles
+	ADC_71_5_CYCLES,  // 71.5 cycles
+	ADC_239_5_CYCLES,  // 239.5 cycles
 } ADC_SamplingTime;
 
 typedef struct{

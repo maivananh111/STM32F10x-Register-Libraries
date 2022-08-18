@@ -29,8 +29,8 @@ TIM::TIM(TIM_TypeDef *Timer, TIM_Direction Direction, TIM_Auto_RePreLoad ARPE){
 	else if(_tim == TIM4){
 		_tim_num = 4;
 	}
-	_dir = TIM_CountUp;
-	_arpe = TIM_AutoReload_Preload_Disable;
+	_dir = TIM_COUNTER_UP;
+	_arpe = TIM_ARP_DISABLE;
 }
 
 TIM::TIM(TIM_TypeDef *Timer, TIM_Channel Channel){
@@ -48,8 +48,8 @@ TIM::TIM(TIM_TypeDef *Timer, TIM_Channel Channel){
 	else if(_tim == TIM4){
 		_tim_num = 4;
 	}
-	_dir = TIM_CountUp;
-	_arpe = TIM_AutoReload_Preload_Disable;
+	_dir = TIM_COUNTER_UP;
+	_arpe = TIM_ARP_DISABLE;
 }
 
 /* TIM Basic */
@@ -148,14 +148,14 @@ Result_t TIM::PWM_Init(TIM_Channel Channel, GPIO_TypeDef *ChannelPort, uint16_t 
 	if(ChannelPort == GPIOB) RCC -> APB2ENR |= RCC_APB2ENR_IOPBEN;
 	if(ChannelPort == GPIOC) RCC -> APB2ENR |= RCC_APB2ENR_IOPCEN;
 
-	GPIO_AFOutput(ChannelPort, ChannelPin, GPIO_AF_PushPull);
+	GPIO_AFOutput(ChannelPort, ChannelPin, GPIO_AF_PUSHPULL);
 
 	_tim -> CR1 |= (_dir << TIM_CR1_DIR_Pos) | (_arpe << TIM_CR1_ARPE_Pos);
 
 	_tim -> ARR = arr - 1;
 	_tim -> PSC = psc - 1;
 
-	if(Channel < TIM_Channel3){ // Channel 1-2
+	if(Channel < TIM_CHANNEL3){ // Channel 1-2
 		_tim -> CCMR1 |=  (TIM_CCMR1_OC1PE << (Channel*8)); // Set PE.
 		_tim -> CCMR1 &=~ (TIM_CCMR1_OC1FE << (Channel*8)); // Clear FE.
 		_tim -> CCMR1 |=  ((PWMMode << TIM_CCMR1_OC1M_Pos) << (Channel*8)); // Set 6UL to OCxM.
@@ -178,16 +178,16 @@ Result_t TIM::PWM_Init(TIM_Channel Channel, GPIO_TypeDef *ChannelPort, uint16_t 
 
 void TIM::PWM_SetDuty(TIM_Channel Channel, uint16_t pwm){
 	switch(Channel){
-		case TIM_Channel1:
+		case TIM_CHANNEL1:
 			_tim -> CCR1 = pwm;
 		break;
-		case TIM_Channel2:
+		case TIM_CHANNEL2:
 			_tim -> CCR2 = pwm;
 		break;
-		case TIM_Channel3:
+		case TIM_CHANNEL3:
 			_tim -> CCR3 = pwm;
 		break;
-		case TIM_Channel4:
+		case TIM_CHANNEL4:
 			_tim -> CCR4 = pwm;
 		break;
 	};
@@ -205,16 +205,16 @@ Result_t TIM::PWM_Start_DMA(TIM_Channel Channel, DMA dma, uint16_t *pwm, uint16_
 
 	uint32_t CCRx_addr;
 	switch(Channel){
-		case TIM_Channel1:
+		case TIM_CHANNEL1:
 			CCRx_addr = (uint32_t)&_tim -> CCR1;
 		break;
-		case TIM_Channel2:
+		case TIM_CHANNEL2:
 			CCRx_addr = (uint32_t)&_tim -> CCR2;
 		break;
-		case TIM_Channel3:
+		case TIM_CHANNEL3:
 			CCRx_addr = (uint32_t)&_tim -> CCR3;
 		break;
-		case TIM_Channel4:
+		case TIM_CHANNEL4:
 			CCRx_addr = (uint32_t)&_tim -> CCR4;
 		break;
 	};
@@ -264,8 +264,8 @@ void TIM::Encoder_Init(GPIO_TypeDef *Port, uint16_t T1Pin, uint16_t T2Pin){
 	if(Port == GPIOB) RCC -> APB2ENR |= RCC_APB2ENR_IOPBEN;
 	if(Port == GPIOC) RCC -> APB2ENR |= RCC_APB2ENR_IOPCEN;
 
-	GPIO_Mode(Port, T1Pin, GPIO_Input_PullUp);
-	GPIO_Mode(Port, T2Pin, GPIO_Input_PullUp);
+	GPIO_Mode(Port, T1Pin, GPIO_INPUT_PULLUP);
+	GPIO_Mode(Port, T2Pin, GPIO_INPUT_PULLUP);
 
 	_tim -> ARR = 0xFFFE;
 	_tim -> PSC = 0;

@@ -23,30 +23,30 @@ extern "C" {
 //#define USE_TIM4_ISR
 
 typedef enum{
-	TIM_Channel1 = 0,
-	TIM_Channel2,
-	TIM_Channel3,
-	TIM_Channel4
+	TIM_CHANNEL1 = 0,
+	TIM_CHANNEL2,
+	TIM_CHANNEL3,
+	TIM_CHANNEL4
 } TIM_Channel;
 
 typedef enum{
-	TIM_CountUp = 0,
-	TIM_CountDown,
+	TIM_COUNTER_UP = 0,
+	TIM_COUNTER_DOWN,
 } TIM_Direction;
 
 typedef enum{
-	TIM_AutoReload_Preload_Disable = 0,
-	TIM_AutoReload_Preload_Enable,
+	TIM_ARP_DISABLE = 0,
+	TIM_ARP_ENABLE,
 } TIM_Auto_RePreLoad;
 
 typedef enum{
-	TIM_PWM_NotInvert = 6,
-	TIM_PWM_Invert = 7,
+	TIM_PWM_NOINVERT = 6,
+	TIM_PWM_INVERT = 7,
 } TIM_PWMMode;
 
 class TIM{
 	public:
-		TIM(TIM_TypeDef *Timer, TIM_Direction Direction = TIM_CountUp, TIM_Auto_RePreLoad ARPE = TIM_AutoReload_Preload_Disable); // For Timer basic.
+		TIM(TIM_TypeDef *Timer, TIM_Direction Direction = TIM_COUNTER_UP, TIM_Auto_RePreLoad ARPE = TIM_ARP_DISABLE); // For Timer basic.
 		TIM(TIM_TypeDef *Timer, TIM_Channel Channel);
 
 		/* Basic TIMER */
@@ -72,7 +72,7 @@ class TIM{
 	private:
 		TIM_TypeDef *_tim;
 		uint8_t _tim_num = 1;
-		TIM_Channel _channel = TIM_Channel1;
+		TIM_Channel _channel = TIM_CHANNEL1;
 		TIM_Direction _dir;
 		TIM_Auto_RePreLoad _arpe;
 

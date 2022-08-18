@@ -9,8 +9,9 @@
 #define GPIO_F1_H_
 
 #include "stdio.h"
-#include "stm32f1xx.h"
+
 #include "stm32f103xb.h"
+#include "stm32f1xx.h"
 
 
 #ifdef __cplusplus
@@ -18,18 +19,18 @@ extern "C" {
 #endif
 
 typedef enum{
-	GPIO_Input_Floating = 0,
-	GPIO_Input_PullUp,
-	GPIO_Input_PullDown,
+	GPIO_INPUT_FLOATING = 0,
+	GPIO_INPUT_PULLUP,
+	GPIO_INPUT_PULLDOWN,
 
-	GPIO_Output_OpenDrain,
-	GPIO_Output_PushPull,
-} GPIO_NORMAL_MODE;
+	GPIO_OUTPUT_OPENDRAIN,
+	GPIO_OUTPUT_PUSHPULL,
+} GPIO_NormalMode;
 
 typedef enum{
-	GPIO_AF_PushPull = 0,
-	GPIO_AF_OpenDrain
-} GPIO_AF_MODE;
+	GPIO_AF_PUSHPULL = 0,
+	GPIO_AF_OPENDRAIN
+} GPIO_AFMode;
 
 typedef enum{
 	SPI1_Remap 			= AFIO_MAPR_SPI1_REMAP,
@@ -51,8 +52,8 @@ typedef enum{
 } GPIO_Periph_Remap;
 
 void GPIO_Init(void);
-void GPIO_Mode(GPIO_TypeDef *gpio_port, uint16_t gpio_pin, GPIO_NORMAL_MODE mode);
-void GPIO_AFOutput(GPIO_TypeDef *gpio_port, uint16_t gpio_pin, GPIO_AF_MODE mode);
+void GPIO_Mode(GPIO_TypeDef *gpio_port, uint16_t gpio_pin, GPIO_NormalMode mode);
+void GPIO_AFOutput(GPIO_TypeDef *gpio_port, uint16_t gpio_pin, GPIO_AFMode mode);
 void GPIO_Analog(GPIO_TypeDef *gpio_port, uint16_t gpio_pin);
 
 void GPIO_Pullup(GPIO_TypeDef *gpio_port, uint16_t gpio_pin);

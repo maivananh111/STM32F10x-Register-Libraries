@@ -19,36 +19,36 @@ extern "C"{
 #endif
 
 typedef enum{
-	I2C_StandardMode = 0,
-	I2C_FastMode,
+	I2C_STANDARD_MODE = 0,
+	I2C_FAST_MODE,
 } I2C_Mode;
 
 typedef enum{
-	I2C_Duty_2 = 0,
-	I2C_Duty_16_9,
+	I2C_DUTY_2 = 0,
+	I2C_DUTY_16_9,
 } I2C_SCLDuty;
 
 typedef enum{
-	I2C_Addr_7Bit = 0,
-	I2C_Addr_10Bit,
+	I2C_ADDRESS_7BIT = 0,
+	I2C_ADDRESS_10BIT,
 } I2C_AddrMode;
 
 typedef enum{
-	I2C_Write = 0,
-	I2C_Read,
+	I2C_WRITE = 0,
+	I2C_READ,
 } I2C_Action;
 
 typedef struct{
 	I2C_Mode Mode;
 	uint32_t Frequency;
-	I2C_AddrMode AddressMode = I2C_Addr_7Bit;
-	I2C_SCLDuty SCLDuty = I2C_Duty_2;
+	I2C_AddrMode AddressMode = I2C_ADDRESS_7BIT;
+	I2C_SCLDuty SCLDuty = I2C_DUTY_2;
+	DMA *TxDma = NULL;
+	DMA *RxDma = NULL;
 	GPIO_TypeDef *Port;
 	uint16_t SCLPin;
 	uint16_t SDAPin;
 	bool PeriphRemap = false;
-	DMA *TxDma = NULL;
-	DMA *RxDma = NULL;
 	bool GeneralCall = false;
 	bool DualAddrMode = false;
 	uint32_t Address = 0;
@@ -85,11 +85,11 @@ class I2C{
 		Result_t Memory_Transmit(uint16_t Slave_Address, uint16_t MemAddr, uint8_t MemAddrSize, uint8_t *Data, uint16_t Size);
 		Result_t Memory_Receive(uint16_t Slave_Address, uint16_t MemAddr, uint8_t MemAddrSize, uint8_t *Data, uint16_t Size);
 
-		DMA *_txdma, *_rxdma;
+		DMA *_TxDma, *_RxDma;
 
 	private:
 		I2C_TypeDef *_i2c;
-		I2C_AddrMode _addrmode = I2C_Addr_7Bit;
+		I2C_AddrMode _addrmode = I2C_ADDRESS_7BIT;
 		void ACKError_Action(void);
 		void ClearADDR(void);
 };

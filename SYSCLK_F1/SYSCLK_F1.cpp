@@ -6,9 +6,9 @@
  */
 
 #include "SYSCLK_F1.h"
-#include "stm32f103xb.h"
 #include "math.h"
 #include "STM_LOG.h"
+#include "stm32f103xb.h"
 
 volatile uint32_t Tick;
 static SysClockMux Mux = HSI;

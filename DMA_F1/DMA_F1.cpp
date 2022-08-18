@@ -1,231 +1,287 @@
 /*
- * DMA_F1.c
+ * DMA_F1.cpp
  *
- *  Created on: Jun 4, 2022
+ *  Created on: 12 thg 8, 2022
  *      Author: A315-56
- */
+*/
 
 #include "DMA_F1.h"
-#include "stm32f103xb.h"
 #include "STM_LOG.h"
 
+#define DMA_LOG_DEBUG_ENABLE
 
-DMA::DMA(DMA_Channel_TypeDef *DMA_CHANNEL){
-	_dmach = DMA_CHANNEL;
-	_intr_priority = 0UL;
-
-	if(DMA_CHANNEL == DMA1_Channel1 || DMA_CHANNEL == DMA1_Channel2 || DMA_CHANNEL == DMA1_Channel3 || DMA_CHANNEL == DMA1_Channel4 ||
-	   DMA_CHANNEL == DMA1_Channel5 || DMA_CHANNEL == DMA1_Channel6 || DMA_CHANNEL == DMA1_Channel7){
+DMA::DMA(DMA_Channel_TypeDef *DmaChannel){
+	_dmachannel = DmaChannel;
+	if(_dmachannel == DMA1_Channel1 || _dmachannel == DMA1_Channel2 || _dmachannel == DMA1_Channel3 ||
+	   _dmachannel == DMA1_Channel4 || _dmachannel == DMA1_Channel5 || _dmachannel == DMA1_Channel6 ||
+	   _dmachannel == DMA1_Channel7){
 		_dma = DMA1;
 	}
+#ifdef DMA2_AVAILABLE
+	else if(_dmachannel == DMA2_Channel1 || _dmachannel == DMA2_Channel2 || _dmachannel == DMA2_Channel3 ||
+	        _dmachannel == DMA2_Channel4 || _dmachannel == DMA2_Channel5 || _dmachannel == DMA2_Channel6 ||
+	        _dmachannel == DMA2_Channel7){
+		_dma = DMA2;
+	}
+#endif
 
-	if(DMA_CHANNEL == DMA1_Channel1){
-		_dma_channel_num = 0;
-		_IRQn = DMA1_Channel1_IRQn;
-	}
-	else if(DMA_CHANNEL == DMA1_Channel2){
-		_dma_channel_num = 4;
-		_IRQn = DMA1_Channel2_IRQn;
-	}
-	else if(DMA_CHANNEL == DMA1_Channel3){
-		_dma_channel_num = 8;
-		_IRQn = DMA1_Channel3_IRQn;
-	}
-	else if(DMA_CHANNEL == DMA1_Channel4){
-		_dma_channel_num = 12;
-		_IRQn = DMA1_Channel4_IRQn;
-	}
-	else if(DMA_CHANNEL == DMA1_Channel5){
-		_dma_channel_num = 16;
-		_IRQn = DMA1_Channel5_IRQn;
-	}
-	else if(DMA_CHANNEL == DMA1_Channel6){
-		_dma_channel_num = 20;
-		_IRQn = DMA1_Channel6_IRQn;
-	}
-	else if(DMA_CHANNEL == DMA1_Channel7){
-		_dma_channel_num = 24;
-		_IRQn = DMA1_Channel7_IRQn;
-	}
-	_size = DMA_Data8Bit;
-	_mode = DMA_Normal;
-	_dir = DMA_MEM_TO_PERIPH;
-	_priority = DMA_Priority_VeryHigh;
+	if(_dmachannel == DMA1_Channel1) {_IRQn = DMA1_Channel1_IRQn; ChannelIndex = 0;}
+	if(_dmachannel == DMA1_Channel2) {_IRQn = DMA1_Channel2_IRQn; ChannelIndex = 1;}
+	if(_dmachannel == DMA1_Channel3) {_IRQn = DMA1_Channel3_IRQn; ChannelIndex = 2;}
+	if(_dmachannel == DMA1_Channel4) {_IRQn = DMA1_Channel4_IRQn; ChannelIndex = 3;}
+	if(_dmachannel == DMA1_Channel5) {_IRQn = DMA1_Channel5_IRQn; ChannelIndex = 4;}
+	if(_dmachannel == DMA1_Channel6) {_IRQn = DMA1_Channel6_IRQn; ChannelIndex = 5;}
+	if(_dmachannel == DMA1_Channel7) {_IRQn = DMA1_Channel7_IRQn; ChannelIndex = 6;}
+#ifdef DMA2_AVAILABLE
+	if(_dmachannel == DMA2_Channel1) {_IRQn = DMA2_Channel1_IRQn; ChannelIndex = 0;}
+	if(_dmachannel == DMA2_Channel2) {_IRQn = DMA2_Channel2_IRQn; ChannelIndex = 1;}
+	if(_dmachannel == DMA2_Channel3) {_IRQn = DMA2_Channel3_IRQn; ChannelIndex = 2;}
+	if(_dmachannel == DMA2_Channel4) {_IRQn = DMA2_Channel4_IRQn; ChannelIndex = 3;}
+	if(_dmachannel == DMA2_Channel5) {_IRQn = DMA2_Channel5_IRQn; ChannelIndex = 4;}
+	if(_dmachannel == DMA2_Channel6) {_IRQn = DMA2_Channel6_IRQn; ChannelIndex = 5;}
+	if(_dmachannel == DMA2_Channel7) {_IRQn = DMA2_Channel7_IRQn; ChannelIndex = 6;}
+#endif
+
 }
 
-void DMA::Init(DMA_Config dma_conf){
-	_mode = dma_conf.DMAMode;
-	_dir  = dma_conf.Direction;
-	_size = dma_conf.DataSize;
-	_priority = dma_conf.DMAPriority;
-	/* ENABLE DMA1 CLOCK */
-	RCC -> AHBENR |= RCC_AHBENR_DMA1EN;
-	/* CONFIGURATION DMA */
-	_dmach -> CCR |= _dir | _mode | DMA_CCR_MINC | (_priority << DMA_CCR_PL_Pos);
-	_dmach -> CCR |= ((_size << DMA_CCR_PSIZE_Pos) | (_size << DMA_CCR_MSIZE_Pos));
-	/* DMA INTERRUPT */
-	__NVIC_SetPriority(_IRQn, dma_conf.INTRPriority);
+void DMA::Init(DMA_Config DmaConf){
+	_dir = DmaConf.Direction;
+	_intrsl = DmaConf.DMAInterruptSelect;
+
+	if(_dma == DMA1) RCC -> AHBENR |= RCC_AHBENR_DMA1EN;
+#ifdef DMA2_AVAILABLE
+	else if(_dma == DMA2) RCC -> AHBENR |= RCC_AHBENR_DMA2EN;
+#endif
+
+	_dmachannel -> CCR |= DmaConf.Mode | DmaConf.Direction | (DmaConf.DMAChannelPriority << DMA_CCR_PL_Pos);
+	_dmachannel -> CCR |= DMA_CCR_MINC | DmaConf.DataSize | (DmaConf.DataSize << 2U);
+
+	__NVIC_SetPriority(_IRQn, DmaConf.InterruptPriority);
 	__NVIC_EnableIRQ(_IRQn);
-	dma_status = READY;
 }
 
-void DMA::SetMode(DMA_Mode MODE){
-	if(MODE == DMA_Normal)        _dmach -> CCR &=~ DMA_Circular;
-	else if(MODE == DMA_Circular) _dmach -> CCR |=  DMA_Circular;
-}
-
-void DMA::SetDirection(DMA_DataDirection DIR){
-	if(DIR == DMA_PERIPH_TO_MEM)      _dmach -> CCR &=~ DMA_MEM_TO_PERIPH;
-	else if(DIR == DMA_MEM_TO_PERIPH) _dmach -> CCR |=  DMA_MEM_TO_PERIPH;
-}
-
-void DMA::Enable(void){
-	/* ENABLE DMA */
-	_dmach -> CCR |= DMA_CCR_EN;
-}
-void DMA::Disable(void){
-	/* DISABLE DMA */
-	_dmach -> CCR &=~ DMA_CCR_EN;
-}
-
-void DMA::Enable_IT(uint32_t IT){
-	_dmach -> CCR |= IT;
-}
-void DMA::Disable_IT(uint32_t IT){
-	_dmach -> CCR &=~ IT;
-}
-
-void DMA::Clear_Intr_Flag(void){
-	/* CLEAR ALL DMAn INTERRUPT FLAG */
-	_dma -> IFCR = (DMA_IFCR_CGIF1 << _dma_channel_num);
-}
-
-Result_t DMA::Start(uint32_t Source_Addr, uint32_t Dest_Addr, uint16_t Data_Size){
+Result_t DMA::Start(uint32_t Src_Address, uint32_t Dest_Address, uint32_t Number_Data){
 	Result_t res = {
 		.Status = OKE,
+		.CodeLine = 0,
 	};
-	if(dma_status == READY){
-		Disable();
-		Clear_Intr_Flag();
+	if(_dmastate == READY){
+		_dmachannel -> CCR &=~ DMA_CCR_EN;
+		_dma -> IFCR = (DMA_IFCR_CGIF1 << (ChannelIndex * 4U));
 
-		_dmach -> CNDTR = Data_Size;
+		_dmachannel -> CNDTR = Number_Data;
 
-		if(_dir == DMA_MEM_TO_PERIPH){ // DMA FOR PERIPHERAL TRANSMIT
-			_dmach -> CMAR = Source_Addr;
-			_dmach -> CPAR = Dest_Addr;
+		if(_dir == DMA_MEM_TO_PERIPH){
+			_dmachannel -> CMAR = Src_Address;
+			_dmachannel -> CPAR = Dest_Address;
 		}
-		else if(_dir == DMA_PERIPH_TO_MEM){ // DMA FOR PERIPHERAL RECEIVE
-			_dmach -> CPAR = Source_Addr;
-			_dmach -> CMAR = Dest_Addr;
+		else{
+			_dmachannel -> CMAR = Dest_Address;
+			_dmachannel -> CPAR = Src_Address;
 		}
 
-		Enable_IT(DMA_CCR_TCIE);
-		Enable();
-
-		dma_status = BUSY;
-
-		res.Status = OKE;
+		_dmachannel -> CCR |= _intrsl;
+		_dmachannel -> CCR |= DMA_CCR_EN;
+		_dmastate = BUSY;
 	}
 	else{
+		res.CodeLine = __LINE__;
 		res.Status = BUSY;
+		_dmastate = READY;
+#ifdef DMA_LOG_DEBUG_ENABLE
+		STM_LOG(BOLD_RED, "DMA", "Error DMA busy, Status: %d --- Error line: %d.", res.Status, res.CodeLine);
+#endif
 	}
-
 	return res;
 }
 
 Result_t DMA::Stop(void){
-	Disable_IT(DMA_CCR_TCIE | DMA_CCR_HTIE | DMA_CCR_TEIE);
-	Disable();
-	Clear_Intr_Flag();
-	dma_status = READY;
-
-	return {OKE, 0, 0};
+	Result_t res = {
+		.Status = OKE,
+		.CodeLine = 0,
+	};
+	if(_dmastate == BUSY){
+		_dmachannel -> CCR &=~ (DMA_CCR_TCIE | DMA_CCR_HTIE | DMA_CCR_TEIE);
+		_dmachannel -> CCR &=~ DMA_CCR_EN;
+		_dma -> IFCR = (DMA_IFCR_CGIF1 << (ChannelIndex * 4U));
+		_dmastate = READY;
+	}
+	else{
+		res.CodeLine = __LINE__;
+		res.Status = ERR;
+		_dmastate = BUSY;
+#ifdef DMA_LOG_DEBUG_ENABLE
+		STM_LOG(BOLD_RED, "DMA", "Error DMA not started yet, Status: %d --- Error line: %d.", res.Status, res.CodeLine);
+#endif
+	}
+	return res;
 }
-
 
 #ifdef USE_DMA1_Channel1
 void DMA1_Channel1_IRQHandler(void){
-	/* CLEAR ALL DMA INTERRUPT FLAG */
-	DMA1 -> IFCR = DMA_IFCR_CGIF1;
-	/* CALL HANDLE */
-	DMA1_Channel1_TxCplt_CallBack();
+	if((DMA1_Channel1 -> CCR & DMA_CCR_HTIE) && (DMA1 -> ISR & DMA_ISR_HTIF1)){
+		if(!(DMA1_Channel1 -> CCR & DMA_CCR_CIRC)) DMA1_Channel1 -> CCR &=~ DMA_CCR_HTIE;
+		DMA1 -> IFCR = DMA_IFCR_CHTIF1;
+		DMA1_Channel1_HalfTx_CallBack();
+	}
+	else if((DMA1_Channel1 -> CCR & DMA_CCR_TCIE) && (DMA1 -> ISR & DMA_ISR_TCIF1)){
+		if(!(DMA1_Channel1 -> CCR & DMA_CCR_CIRC)) DMA1_Channel1 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE);
+		DMA1 -> IFCR = DMA_IFCR_CTCIF1;
+		DMA1_Channel1_TxCplt_CallBack();
+	}
+	else if((DMA1_Channel1 -> CCR & DMA_CCR_TEIE) && (DMA1 -> ISR & DMA_ISR_TEIF1)){
+		DMA1_Channel1 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE | DMA_CCR_HTIE);
+		DMA1 -> IFCR = DMA_IFCR_CGIF1;
+		DMA1_Channel1_TxError_CallBack();
+	}
 }
-__WEAK void DMA1_Channel1_TxCplt_CallBack(void){
-
-}
+__WEAK void DMA1_Channel1_HalfTx_CallBack(void){}
+__WEAK void DMA1_Channel1_TxCplt_CallBack(void){}
+__WEAK void DMA1_Channel1_TxError_CallBack(void){}
 #endif
 
 #ifdef USE_DMA1_Channel2
 void DMA1_Channel2_IRQHandler(void){
-	/* CLEAR ALL DMA INTERRUPT FLAG */
-	DMA1 -> IFCR = DMA_IFCR_CGIF2;
-	/* CALL HANDLE */
-	DMA1_Channel2_TxCplt_CallBack();
+	if((DMA1_Channel2 -> CCR & DMA_CCR_HTIE) && (DMA1 -> ISR & DMA_ISR_HTIF2)){
+		if(!(DMA1_Channel2 -> CCR & DMA_CCR_CIRC)) DMA1_Channel2 -> CCR &=~ DMA_CCR_HTIE;
+		DMA1 -> IFCR = DMA_IFCR_CHTIF2;
+		DMA1_Channel2_HalfTx_CallBack();
+	}
+	else if((DMA1_Channel2 -> CCR & DMA_CCR_TCIE) && (DMA1 -> ISR & DMA_ISR_TCIF2)){
+		if(!(DMA1_Channel2 -> CCR & DMA_CCR_CIRC)) DMA1_Channel2 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE);
+		DMA1 -> IFCR = DMA_IFCR_CTCIF2;
+		DMA1_Channel2_TxCplt_CallBack();
+	}
+	else if((DMA1_Channel2 -> CCR & DMA_CCR_TEIE) && (DMA1 -> ISR & DMA_ISR_TEIF2)){
+		DMA1_Channel2 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE | DMA_CCR_HTIE);
+		DMA1 -> IFCR = DMA_IFCR_CGIF2;
+		DMA1_Channel2_TxError_CallBack();
+	}
 }
-__WEAK void DMA1_Channel2_TxCplt_CallBack(void){
-
-}
+__WEAK void DMA1_Channel2_HalfTx_CallBack(void){}
+__WEAK void DMA1_Channel2_TxCplt_CallBack(void){}
+__WEAK void DMA1_Channel2_TxError_CallBack(void){}
 #endif
 
 #ifdef USE_DMA1_Channel3
 void DMA1_Channel3_IRQHandler(void){
-	/* CLEAR ALL DMA INTERRUPT FLAG */
-	DMA1 -> IFCR = DMA_IFCR_CGIF3;
-	/* CALL HANDLE */
-	DMA1_Channel3_TxCplt_CallBack();
+	if((DMA1_Channel3 -> CCR & DMA_CCR_HTIE) && (DMA1 -> ISR & DMA_ISR_HTIF3)){
+		if(!(DMA1_Channel3 -> CCR & DMA_CCR_CIRC)) DMA1_Channel3 -> CCR &=~ DMA_CCR_HTIE;
+		DMA1 -> IFCR = DMA_IFCR_CHTIF3;
+		DMA1_Channel3_HalfTx_CallBack();
+	}
+	else if((DMA1_Channel3 -> CCR & DMA_CCR_TCIE) && (DMA1 -> ISR & DMA_ISR_TCIF3)){
+		if(!(DMA1_Channel3 -> CCR & DMA_CCR_CIRC)) DMA1_Channel3 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE);
+		DMA1 -> IFCR = DMA_IFCR_CTCIF3;
+		DMA1_Channel3_TxCplt_CallBack();
+	}
+	else if((DMA1_Channel3 -> CCR & DMA_CCR_TEIE) && (DMA1 -> ISR & DMA_ISR_TEIF3)){
+		DMA1_Channel3 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE | DMA_CCR_HTIE);
+		DMA1 -> IFCR = DMA_IFCR_CGIF3;
+		DMA1_Channel3_TxError_CallBack();
+	}
 }
-__WEAK void DMA1_Channel3_TxCplt_CallBack(void){
-
-}
+__WEAK void DMA1_Channel3_HalfTx_CallBack(void){}
+__WEAK void DMA1_Channel3_TxCplt_CallBack(void){}
+__WEAK void DMA1_Channel3_TxError_CallBack(void){}
 #endif
 
 #ifdef USE_DMA1_Channel4
 void DMA1_Channel4_IRQHandler(void){
-	/* CLEAR ALL DMA INTERRUPT FLAG */
-	DMA1 -> IFCR |= DMA_IFCR_CGIF4;
-	/* CALL HANDLE */
-	DMA1_Channel4_TxCplt_CallBack();
+	if((DMA1_Channel4 -> CCR & DMA_CCR_HTIE) && (DMA1 -> ISR & DMA_ISR_HTIF4)){
+		if(!(DMA1_Channel4 -> CCR & DMA_CCR_CIRC)) DMA1_Channel4 -> CCR &=~ DMA_CCR_HTIE;
+		DMA1 -> IFCR = DMA_IFCR_CHTIF4;
+		DMA1_Channel4_HalfTx_CallBack();
+	}
+	else if((DMA1_Channel4 -> CCR & DMA_CCR_TCIE) && (DMA1 -> ISR & DMA_ISR_TCIF4)){
+		if(!(DMA1_Channel4 -> CCR & DMA_CCR_CIRC)) DMA1_Channel4 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE);
+		DMA1 -> IFCR = DMA_IFCR_CTCIF4;
+		DMA1_Channel4_TxCplt_CallBack();
+	}
+	else if((DMA1_Channel4 -> CCR & DMA_CCR_TEIE) && (DMA1 -> ISR & DMA_ISR_TEIF4)){
+		DMA1_Channel4 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE | DMA_CCR_HTIE);
+		DMA1 -> IFCR = DMA_IFCR_CGIF4;
+		DMA1_Channel4_TxError_CallBack();
+	}
 }
-__WEAK void DMA1_Channel4_TxCplt_CallBack(void){
-
-}
+__WEAK void DMA1_Channel4_HalfTx_CallBack(void){}
+__WEAK void DMA1_Channel4_TxCplt_CallBack(void){}
+__WEAK void DMA1_Channel4_TxError_CallBack(void){}
 #endif
 
 #ifdef USE_DMA1_Channel5
 void DMA1_Channel5_IRQHandler(void){
-	/* CLEAR ALL DMA INTERRUPT FLAG */
-	DMA1 -> IFCR = DMA_IFCR_CGIF5;
-	/* CALL HANDLE */
-	DMA1_Channel5_TxCplt_CallBack();
+	if((DMA1_Channel5 -> CCR & DMA_CCR_HTIE) && (DMA1 -> ISR & DMA_ISR_HTIF5)){
+		if(!(DMA1_Channel5 -> CCR & DMA_CCR_CIRC)) DMA1_Channel5 -> CCR &=~ DMA_CCR_HTIE;
+		DMA1 -> IFCR = DMA_IFCR_CHTIF5;
+		DMA1_Channel5_HalfTx_CallBack();
+	}
+	else if((DMA1_Channel5 -> CCR & DMA_CCR_TCIE) && (DMA1 -> ISR & DMA_ISR_TCIF5)){
+		if(!(DMA1_Channel5 -> CCR & DMA_CCR_CIRC)) DMA1_Channel5 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE);
+		DMA1 -> IFCR = DMA_IFCR_CTCIF5;
+		DMA1_Channel5_TxCplt_CallBack();
+	}
+	else if((DMA1_Channel5 -> CCR & DMA_CCR_TEIE) && (DMA1 -> ISR & DMA_ISR_TEIF5)){
+		DMA1_Channel5 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE | DMA_CCR_HTIE);
+		DMA1 -> IFCR = DMA_IFCR_CGIF5;
+		DMA1_Channel5_TxError_CallBack();
+	}
 }
-__WEAK void DMA1_Channel5_TxCplt_CallBack(void){
-
-}
+__WEAK void DMA1_Channel5_HalfTx_CallBack(void){}
+__WEAK void DMA1_Channel5_TxCplt_CallBack(void){}
+__WEAK void DMA1_Channel5_TxError_CallBack(void){}
 #endif
 
 #ifdef USE_DMA1_Channel6
 void DMA1_Channel6_IRQHandler(void){
-	/* CLEAR ALL DMA INTERRUPT FLAG */
-	DMA1 -> IFCR |= DMA_IFCR_CGIF6;
-	/* CALL HANDLE */
-	DMA1_Channel6_TxCplt_CallBack();
+	if((DMA1_Channel6 -> CCR & DMA_CCR_HTIE) && (DMA1 -> ISR & DMA_ISR_HTIF6)){
+		if(!(DMA1_Channel6 -> CCR & DMA_CCR_CIRC)) DMA1_Channel6 -> CCR &=~ DMA_CCR_HTIE;
+		DMA1 -> IFCR = DMA_IFCR_CHTIF6;
+		DMA1_Channel6_HalfTx_CallBack();
+	}
+	else if((DMA1_Channel6 -> CCR & DMA_CCR_TCIE) && (DMA1 -> ISR & DMA_ISR_TCIF6)){
+		if(!(DMA1_Channel6 -> CCR & DMA_CCR_CIRC)) DMA1_Channel6 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE);
+		DMA1 -> IFCR = DMA_IFCR_CTCIF6;
+		DMA1_Channel6_TxCplt_CallBack();
+	}
+	else if((DMA1_Channel6 -> CCR & DMA_CCR_TEIE) && (DMA1 -> ISR & DMA_ISR_TEIF6)){
+		DMA1_Channel6 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE | DMA_CCR_HTIE);
+		DMA1 -> IFCR = DMA_IFCR_CGIF6;
+		DMA1_Channel6_TxError_CallBack();
+	}
 }
-__WEAK void DMA1_Channel6_TxCplt_CallBack(void){
-
-}
+__WEAK void DMA1_Channel6_HalfTx_CallBack(void){}
+__WEAK void DMA1_Channel6_TxCplt_CallBack(void){}
+__WEAK void DMA1_Channel6_TxError_CallBack(void){}
 #endif
 
 #ifdef USE_DMA1_Channel7
 void DMA1_Channel7_IRQHandler(void){
-	/* CLEAR ALL DMA INTERRUPT FLAG */
-	DMA1 -> IFCR |= DMA_IFCR_CGIF7;
-	/* CALL HANDLE */
-	DMA1_Channel7_TxCplt_CallBack();
+	if((DMA1_Channel7 -> CCR & DMA_CCR_HTIE) && (DMA1 -> ISR & DMA_ISR_HTIF7)){
+		if(!(DMA1_Channel7 -> CCR & DMA_CCR_CIRC)) DMA1_Channel7 -> CCR &=~ DMA_CCR_HTIE;
+		DMA1 -> IFCR = DMA_IFCR_CHTIF7;
+		DMA1_Channel7_HalfTx_CallBack();
+	}
+	else if((DMA1_Channel7 -> CCR & DMA_CCR_TCIE) && (DMA1 -> ISR & DMA_ISR_TCIF7)){
+		if(!(DMA1_Channel7 -> CCR & DMA_CCR_CIRC)) DMA1_Channel7 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE);
+		DMA1 -> IFCR = DMA_IFCR_CTCIF7;
+		DMA1_Channel7_TxCplt_CallBack();
+	}
+	else if((DMA1_Channel7 -> CCR & DMA_CCR_TEIE) && (DMA1 -> ISR & DMA_ISR_TEIF7)){
+		DMA1_Channel7 -> CCR &=~ (DMA_CCR_TEIE | DMA_CCR_TCIE | DMA_CCR_HTIE);
+		DMA1 -> IFCR = DMA_IFCR_CGIF7;
+		DMA1_Channel7_TxError_CallBack();
+	}
 }
-__WEAK void DMA1_Channel7_TxCplt_CallBack(void){
-
-}
+__WEAK void DMA1_Channel7_HalfTx_CallBack(void){}
+__WEAK void DMA1_Channel7_TxCplt_CallBack(void){}
+__WEAK void DMA1_Channel7_TxError_CallBack(void){}
 #endif
+
+
+
+
+
 
 
 

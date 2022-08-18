@@ -19,14 +19,14 @@ I2C::I2C(I2C_TypeDef *I2C){
 }
 
 Result_t I2C::Init(I2C_Config i2c_conf){
-	_txdma = i2c_conf.TxDma;
-	_rxdma = i2c_conf.RxDma;
+	_TxDma = i2c_conf.TxDma;
+	_RxDma = i2c_conf.RxDma;
 
 	Result_t res = {
 		.Status = OKE,
 		.CodeLine = 0,
 	};
-	if(i2c_conf.Mode == I2C_StandardMode && i2c_conf.Frequency > 100000U) {
+	if(i2c_conf.Mode == I2C_STANDARD_MODE && i2c_conf.Frequency > 100000U) {
 		res.Status = ERR;
 		res.CodeLine = __LINE__;
 		return res;
@@ -43,8 +43,8 @@ Result_t I2C::Init(I2C_Config i2c_conf){
 	else if(i2c_conf.Port == GPIOC) RCC -> APB2ENR |= RCC_APB2ENR_IOPCEN;
 
 	/* ***********************GPIO INIT********************** */
-	GPIO_AFOutput(i2c_conf.Port, i2c_conf.SCLPin, GPIO_AF_OpenDrain);
-	GPIO_AFOutput(i2c_conf.Port, i2c_conf.SDAPin, GPIO_AF_OpenDrain);
+	GPIO_AFOutput(i2c_conf.Port, i2c_conf.SCLPin, GPIO_AF_OPENDRAIN);
+	GPIO_AFOutput(i2c_conf.Port, i2c_conf.SDAPin, GPIO_AF_OPENDRAIN);
 	GPIO_Pullup(i2c_conf.Port, i2c_conf.SCLPin);
 	GPIO_Pullup(i2c_conf.Port, i2c_conf.SDAPin);
 	if(i2c_conf.PeriphRemap && _i2c == I2C1) GPIO_Remap(I2C1_Remap);
@@ -65,18 +65,18 @@ Result_t I2C::Init(I2C_Config i2c_conf){
 	/* ***********************SET ABP1 FREQUENCY TO CR2 REGISTER********************** */
 	_i2c -> CR2 |= (uint32_t)((apb1_freq / 1000000U) >> I2C_CR2_FREQ_Pos);
 	/* ***********************SET SCL RISE TIME********************** */
-	_i2c -> TRISE = (uint32_t)((i2c_conf.Mode == I2C_StandardMode)? ((apb1_freq/1000000U) + 1U) : ((((apb1_freq/1000000U) * 300U) / 1000U) + 1U));
+	_i2c -> TRISE = (uint32_t)((i2c_conf.Mode == I2C_STANDARD_MODE)? ((apb1_freq/1000000U) + 1U) : ((((apb1_freq/1000000U) * 300U) / 1000U) + 1U));
 	/* ***********************SET I2C SPEED********************** */
-	if(i2c_conf.Mode == I2C_StandardMode){
+	if(i2c_conf.Mode == I2C_STANDARD_MODE){
 		_i2c -> CCR &=~ I2C_CCR_FS;
 		// T_high = T_low = CCR * T_PCLK1, T = 2 * T_high.
 		uint32_t ccr_tmp = (uint32_t)((apb1_freq - 1U)/(2U * i2c_conf.Frequency) + 1U);
 		if(ccr_tmp < 4U) ccr_tmp = 4U;
 		_i2c -> CCR |= ccr_tmp;
 	}
-	else if(i2c_conf.Mode == I2C_FastMode){
+	else if(i2c_conf.Mode == I2C_FAST_MODE){
 		_i2c -> CCR |= I2C_CCR_FS;
-		if(i2c_conf.SCLDuty == I2C_Duty_2){
+		if(i2c_conf.SCLDuty == I2C_DUTY_2){
 			_i2c -> CCR &=~ I2C_CCR_DUTY;
 			// T_high = (1/2)T_low = CCR * TPCLK1, T = 3 * T_high.
 			uint32_t ccr_tmp = (uint32_t)((apb1_freq)/(3U * i2c_conf.Frequency));
@@ -84,7 +84,7 @@ Result_t I2C::Init(I2C_Config i2c_conf){
 			_i2c -> CCR |= ccr_tmp;
 
 		}
-		else if(i2c_conf.SCLDuty == I2C_Duty_16_9){
+		else if(i2c_conf.SCLDuty == I2C_DUTY_16_9){
 			_i2c -> CCR |= I2C_CCR_DUTY;
 			// T_high = (9/16)T_low = CCR * TPCLK1, T = 25 * T_high.
 			uint32_t ccr_tmp = (uint32_t)((apb1_freq)/(25U * i2c_conf.Frequency));
@@ -95,8 +95,8 @@ Result_t I2C::Init(I2C_Config i2c_conf){
 	/* ***********************GENERAL CALL********************** */
 	if(i2c_conf.GeneralCall) _i2c -> CR1 |= I2C_CR1_ENGC;
 	/* ***********************ADDRESS 7 OR 10BIT********************** */
-	if(i2c_conf.AddressMode == I2C_Addr_10Bit)     _i2c -> OAR1 |= (I2C_OAR1_ADDMODE | 0x00004000U) | i2c_conf.Address;
-	else if(i2c_conf.AddressMode == I2C_Addr_7Bit) _i2c -> OAR1 |= 0x00004000U | i2c_conf.Address;
+	if(i2c_conf.AddressMode == I2C_ADDRESS_10BIT)     _i2c -> OAR1 |= (I2C_OAR1_ADDMODE | 0x00004000U) | i2c_conf.Address;
+	else if(i2c_conf.AddressMode == I2C_ADDRESS_7BIT) _i2c -> OAR1 |= 0x00004000U | i2c_conf.Address;
 	/* ***********************DUAL ADDRESS MODE********************** */
 	if(i2c_conf.DualAddrMode) _i2c -> OAR2 |= I2C_OAR2_ENDUAL | i2c_conf.Address_2;
 	/* ***********************ENABLE I2C PERIPHERAL********************** */
@@ -172,8 +172,8 @@ Result_t I2C::SendSlaveAddr(uint16_t Slave_Address, I2C_Action Action){
 		.CodeLine = 0,
 	};
 	/* ***********************SEND SLAVE ADDRESS*********************** */
-	if(_addrmode == I2C_Addr_7Bit){
-		if(Action == I2C_Write)_i2c -> DR = (uint8_t)((Slave_Address & 0x00FF) & ~I2C_OAR1_ADD0); // SEND 8BIT SLAVE ADDRESS WITH LSB BIT IS RESET(TRANSMIT MODE).
+	if(_addrmode == I2C_ADDRESS_7BIT){
+		if(Action == I2C_WRITE)_i2c -> DR = (uint8_t)((Slave_Address & 0x00FF) & ~I2C_OAR1_ADD0); // SEND 8BIT SLAVE ADDRESS WITH LSB BIT IS RESET(TRANSMIT MODE).
 		else                   _i2c -> DR = (uint8_t)((Slave_Address & 0x00FF) |  I2C_OAR1_ADD0); // SEND 8BIT SLAVE ADDRESS WITH LSB BIT IS SET(RECEIVE MODE).
 	}
 	/* ***********************WAIT ADDR FLAG IS SET*********************** */
@@ -441,7 +441,7 @@ Result_t I2C::Transmit_DMA(uint8_t *TxData, uint16_t Size){
 		.CodeLine = 0,
 	};
 	// SETUP AND START DMA.
-	res = _txdma -> Start((uint32_t)TxData, (uint32_t)(&_i2c -> DR), Size);
+	res = _TxDma -> Start((uint32_t)TxData, (uint32_t)(&_i2c -> DR), Size);
 	if(res.Status != OKE){
 		res.CodeLine = __LINE__;
 		return res;
@@ -458,7 +458,7 @@ Result_t I2C::Receive_DMA(uint8_t *RxData, uint16_t Size){
 		.CodeLine = 0,
 	};
 	// SETUP AND START DMA.
-	res = _rxdma -> Start((uint32_t)(&_i2c -> DR), (uint32_t)RxData, Size);
+	res = _RxDma -> Start((uint32_t)(&_i2c -> DR), (uint32_t)RxData, Size);
 	if(res.Status != OKE){
 		res.CodeLine = __LINE__;
 		return res;
@@ -479,7 +479,7 @@ Result_t I2C::Stop_Transmit_DMA(void){
 		.CodeLine = 0,
 	};
 	if(_i2c -> CR2 & I2C_CR2_DMAEN){
-		_txdma -> Stop();
+		_TxDma -> Stop();
 		_i2c -> CR2 &=~ I2C_CR2_DMAEN;
 	}
 	else{
@@ -495,7 +495,7 @@ Result_t I2C::Stop_Receive_DMA(void){
 		.CodeLine = 0,
 	};
 	if(_i2c -> CR2 & I2C_CR2_DMAEN){
-		_rxdma -> Stop();
+		_RxDma -> Stop();
 		_i2c -> CR2 &=~ I2C_CR2_DMAEN;
 	}
 	else{
@@ -513,7 +513,7 @@ Result_t I2C::Memory_Transmit(uint16_t Slave_Address, uint16_t MemAddr, uint8_t 
 	};
 	res = SendStart();
 	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
-	res = SendSlaveAddr(Slave_Address, I2C_Write);
+	res = SendSlaveAddr(Slave_Address, I2C_WRITE);
 	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
 	if(MemAddrSize == 1U) {
 		res = Transmit((uint8_t)(MemAddr & 0x00FF)); // MEMORY ADDRESS LSB.
@@ -540,7 +540,7 @@ Result_t I2C::Memory_Receive(uint16_t Slave_Address, uint16_t MemAddr, uint8_t M
 
 	res = SendStart();
 	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
-	res = SendSlaveAddr(Slave_Address, I2C_Write);
+	res = SendSlaveAddr(Slave_Address, I2C_WRITE);
 	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
 	if(MemAddrSize == 1U) {
 		res = Transmit((uint8_t)(MemAddr & 0x00FF)); // MEMORY ADDRESS LSB.
@@ -554,7 +554,7 @@ Result_t I2C::Memory_Receive(uint16_t Slave_Address, uint16_t MemAddr, uint8_t M
 	}
 	res = SendRepeatStart();
 	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
-	res = SendSlaveAddr(Slave_Address, I2C_Read);
+	res = SendSlaveAddr(Slave_Address, I2C_READ);
 	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
 	res = Receive(Data, Size);
 	if(res.Status != OKE){ res.CodeLine = __LINE__; return res; }
@@ -589,7 +589,7 @@ Result_t I2C::Memory_Receive(uint16_t Slave_Address, uint16_t MemAddr, uint8_t M
 	}
 
 	// SEND SLAVE ADDRESS.
-	if(_addrmode == I2C_Addr_7Bit) // MODE 7BIT ADDRESS.
+	if(_addrmode == I2C_ADDRESS_7BIT) // MODE 7BIT ADDRESS.
 		(_i2c -> DR = (uint8_t)((Slave_Address & 0x00FF) & ~I2C_OAR1_ADD0)); // SEND 7BIT DATA WITH LSB BIT IS RESET(TRANSMIT MODE).
 	// WAIT ADDR FLAG IS SET.
 	res = CheckFlag_In_WaitFlagTimeout(&(_i2c -> SR1), I2C_SR1_AF, FLAG_SET, &(_i2c -> SR1), I2C_SR1_ADDR, FLAG_SET, I2C_DEFAULT_TIMEOUT);
@@ -698,7 +698,7 @@ Result_t I2C::Memory_Receive(uint16_t Slave_Address, uint16_t MemAddr, uint8_t M
 	}
 
 	// SEND SLAVE ADDRESS.
-	if(_addrmode == I2C_Addr_7Bit) // MODE 7BIT ADDRESS.
+	if(_addrmode == I2C_ADDRESS_7BIT) // MODE 7BIT ADDRESS.
 		(_i2c -> DR = (uint8_t)((Slave_Address & 0x00FF) & ~I2C_OAR1_ADD0)); // SEND 7BIT DATA WITH LSB BIT IS RESET(TRANSMIT MODE).
 	// WAIT ADDR FLAG IS SET.
 	res = CheckFlag_In_WaitFlagTimeout(&(_i2c -> SR1), I2C_SR1_AF, FLAG_SET, &(_i2c -> SR1), I2C_SR1_ADDR, FLAG_SET, I2C_DEFAULT_TIMEOUT);
@@ -760,7 +760,7 @@ Result_t I2C::Memory_Receive(uint16_t Slave_Address, uint16_t MemAddr, uint8_t M
 	}
 
 	// SEND SLAVE ADDRESS READ.
-	if(_addrmode == I2C_Addr_7Bit) // MODE 7BIT ADDRESS.
+	if(_addrmode == I2C_ADDRESS_7BIT) // MODE 7BIT ADDRESS.
 		(_i2c -> DR = (uint8_t)((Slave_Address & 0x00FF) | I2C_OAR1_ADD0)); // SEND 7BIT DATA WITH LSB BIT IS SET(RECEIVE MODE).
 	// WAIT ADDR FLAG IS SET.
 	res = CheckFlag_In_WaitFlagTimeout(&(_i2c -> SR1), I2C_SR1_AF, FLAG_SET, &(_i2c -> SR1), I2C_SR1_ADDR, FLAG_SET, I2C_DEFAULT_TIMEOUT);

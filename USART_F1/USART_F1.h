@@ -21,16 +21,23 @@
 extern "C" {
 #endif
 
+
 typedef enum{
-	USART_No_INTR = 0,
-	USART_INTR,
-	USART_DMA,
-	USART_INTR_DMA
+	USART_NORMAL_DMA = 0,
+	USART_INTERRUPT,
 } USART_Type;
 
+typedef enum{
+	USART_INTR_RX = 1,
+	USART_INTR_TX,
+	USART_INTR_TX_RX,
+} USART_InterruptSelect;
+
 typedef struct{
-	USART_Type Type = USART_INTR;
 	uint32_t Baudrate;
+	USART_Type Type = USART_NORMAL_DMA;
+	USART_InterruptSelect InterruptSelect = USART_INTR_RX;
+	uint32_t InterruptPriority = 0;
 	GPIO_TypeDef *Port;
 	uint16_t TxPin;
 	uint16_t RxPin;
@@ -50,13 +57,12 @@ class USART {
 		Result_t TransmitDMA(uint8_t *TxData, uint16_t Length);
 		Result_t ReceiveDMA(uint8_t *RxData, uint16_t Length);
 
-		Result_t Stop_Transmit_DMA(void);
-		Result_t Stop_Receive_DMA(void);
+		Result_t Stop_DMA(void);
 
-		DMA *_txdma, *_rxdma;
+		DMA *_TxDma, *_RxDma;
+
 	private:
 		USART_TypeDef *_usart;
-		USART_Type _type;
 //		uint8_t _usart_num = 1;
 };
 
@@ -65,11 +71,13 @@ void USART1_IRQHandler(void);
 void USART1_RXCplt_CallBack(void);
 void USART1_TXCplt_CallBack(void);
 #endif
+
 #ifdef USE_USART2_ISR
 void USART2_IRQHandler(void);
 void USART2_RXCplt_CallBack(void);
 void USART2_TXCplt_CallBack(void);
 #endif
+
 #ifdef USE_USART3_ISR
 void USART3_IRQHandler(void);
 void USART3_RXCplt_CallBack(void);
